@@ -94,7 +94,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ requiredRole }) => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <Sidebar defaultCollapsed={false} collapsible={"icon"}>
+        <Sidebar className="border-r">
           <SidebarHeader className="flex justify-center py-6 border-b">
             <div className="flex items-center space-x-2 text-xl font-bold text-primary">
               <Home className="h-6 w-6" />

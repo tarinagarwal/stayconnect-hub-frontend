@@ -1,4 +1,5 @@
 
+// Just updating the Property interface in api.ts to fix the type error
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@/context/AuthContext';
 

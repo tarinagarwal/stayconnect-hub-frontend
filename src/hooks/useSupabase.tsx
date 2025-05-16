@@ -21,23 +21,27 @@ export const useSupabaseConfig = (queryClient: QueryClient) => {
           return failureCount < 2;
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
-        onError: (error: any) => {
-          console.error('Query error:', error);
-          toast({
-            title: "Error",
-            description: error?.message || "An error occurred while fetching data",
-            variant: "destructive"
-          });
+        meta: {
+          onError: (error: any) => {
+            console.error('Query error:', error);
+            toast({
+              title: "Error",
+              description: error?.message || "An error occurred while fetching data",
+              variant: "destructive"
+            });
+          }
         }
       },
       mutations: {
-        onError: (error: any) => {
-          console.error('Mutation error:', error);
-          toast({
-            title: "Error",
-            description: error?.message || "An error occurred while updating data",
-            variant: "destructive"
-          });
+        meta: {
+          onError: (error: any) => {
+            console.error('Mutation error:', error);
+            toast({
+              title: "Error",
+              description: error?.message || "An error occurred while updating data",
+              variant: "destructive"
+            });
+          }
         }
       }
     });

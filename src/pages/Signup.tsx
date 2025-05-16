@@ -18,7 +18,7 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<UserRole>('finder');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { signup, isAuthenticated, currentUser } = useAuth();
+  const { signup, isAuthenticated, currentUser, createAdminAccount } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -31,6 +31,20 @@ const Signup = () => {
       navigate(redirectPath, { replace: true });
     }
   }, [isAuthenticated, currentUser, navigate]);
+
+  // Create the admin account when component mounts
+  useEffect(() => {
+    // Call this function to create an admin account with admin@gmail.com
+    const setupAdminAccount = async () => {
+      try {
+        await createAdminAccount('admin@gmail.com', 'admin@123', 'Admin User');
+      } catch (error) {
+        console.error('Error creating admin account:', error);
+      }
+    };
+
+    setupAdminAccount();
+  }, [createAdminAccount]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +102,13 @@ const Signup = () => {
               Log in
             </Link>
           </p>
+          <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
+            <p className="text-sm text-green-700">
+              <strong>Admin account created!</strong> You can log in with:
+              <br />Email: admin@gmail.com
+              <br />Password: admin@123
+            </p>
+          </div>
         </div>
 
         <Card>

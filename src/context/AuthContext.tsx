@@ -22,6 +22,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
+  createAdminAccount: (email: string, password: string, name: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -176,6 +177,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const createAdminAccount = async (email: string, password: string, name: string) => {
+    try {
+      // Check if the admin account already exists
+      const { data: existingUsers, error: userCheckError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .eq('role', 'admin');
+        
+      if (userCheckError) {
+        throw new Error(userCheckError.message);
+      }
+      
+      if (existingUsers && existingUsers.length > 0) {
+        toast({
+          title: "Info",
+          description: "Admin account already exists."
+        });
+        return;
+      }
+      
+      // Sign up the admin user
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            role: 'admin',
+          }
+        }
+      });
+
+      if (signUpError) {
+        throw new Error(signUpError.message);
+      }
+
+      toast({
+        title: "Success",
+        description: "Admin account created successfully!"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create admin account",
+        variant: "destructive"
+      });
+      console.error('Error creating admin account:', error);
+    }
+  };
+
   const logout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -195,7 +247,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, isAuthenticated, login, signup, logout, loading }}>
+    <AuthContext.Provider value={{ 
+      currentUser, 
+      isAuthenticated, 
+      login, 
+      signup, 
+      logout, 
+      loading,
+      createAdminAccount 
+    }}>
       {children}
     </AuthContext.Provider>
   );
