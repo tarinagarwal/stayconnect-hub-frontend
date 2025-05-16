@@ -1,7 +1,6 @@
-
 // Just updating the Property interface in api.ts to fix the type error
 import { supabase } from '@/integrations/supabase/client';
-import { User } from '@/context/AuthContext';
+import { User, UserRole } from '@/context/AuthContext';
 
 // Types for our API
 export interface Property {
@@ -11,13 +10,21 @@ export interface Property {
   description: string;
   location: string;
   price: number;
-  featured: boolean;
+  featured: boolean | null;
   created_at: string;
   updated_at: string;
-  owner?: User;
+  owner?: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    avatar?: string;
+    phone?: string;
+  };
   images?: PropertyImage[];
   amenities?: PropertyAmenity[];
   rating?: number;
+  reviews?: Review[];
 }
 
 export interface PropertyImage {
@@ -90,6 +97,7 @@ export const propertiesApi = {
 
     if (error) throw new Error(error.message);
     
+    // Calculate ratings for each property
     const propertiesWithRating = await Promise.all(
       (data || []).map(async (property) => {
         const { data: reviews } = await supabase

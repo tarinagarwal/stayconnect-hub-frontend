@@ -1,4 +1,3 @@
-
 // src/pages/Index.tsx
 
 import React from 'react';
@@ -17,14 +16,14 @@ const Index = () => {
   const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  // Fetch featured properties
+  // Fetch featured properties from Supabase
   const { data: properties, isLoading } = useQuery({
     queryKey: ['featuredProperties'],
     queryFn: propertiesApi.getAll,
   });
 
   // Filter featured properties only
-  const featuredProperties = properties?.filter(p => p.featured).slice(0, 6);
+  const featuredProperties = properties?.filter(p => p.featured === true).slice(0, 6);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

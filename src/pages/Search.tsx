@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -14,8 +13,9 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import PropertyList from '@/components/PropertyList';
-import { Property, properties } from '@/data/mockData';
+import { Property, propertiesApi } from '@/services/api';
 import { Search as SearchIcon } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,28 +28,37 @@ const Search = () => {
   const [sortBy, setSortBy] = useState('recommended');
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   
-  // All available amenities from properties
-  const allAmenities = Array.from(
-    new Set(properties.flatMap(property => property.amenities))
-  ).sort();
+  // Fetch all properties
+  const { data: properties, isLoading, error } = useQuery({
+    queryKey: ['allProperties'],
+    queryFn: propertiesApi.getAll,
+  });
+
+  // Extract all available amenities from properties
+  const allAmenities = properties ? Array.from(
+    new Set(properties.flatMap(property => 
+      property.amenities?.map(a => a.amenity) || []
+    ))
+  ).sort() : [];
 
   useEffect(() => {
     // Initialize from URL params
     const queryParam = searchParams.get('query') || '';
     setSearchQuery(queryParam);
     
-    // Simulate API call delay
-    setLoading(true);
-    const timer = setTimeout(() => {
+    if (!isLoading && properties) {
       filterProperties();
-      setLoading(false);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, properties, isLoading]);
 
   const filterProperties = () => {
+    if (!properties) {
+      setFilteredProperties([]);
+      setLoading(false);
+      return;
+    }
+    
     let results = [...properties];
     
     // Filter by search query
@@ -71,7 +80,9 @@ const Search = () => {
     // Filter by amenities
     if (selectedAmenities.length > 0) {
       results = results.filter(property =>
-        selectedAmenities.every(amenity => property.amenities.includes(amenity))
+        selectedAmenities.every(amenity => 
+          property.amenities?.some(a => a.amenity === amenity)
+        )
       );
     }
     
@@ -84,7 +95,7 @@ const Search = () => {
         results.sort((a, b) => b.price - a.price);
         break;
       case 'rating':
-        results.sort((a, b) => b.rating - a.rating);
+        results.sort((a, b) => (b.rating || 0) - (a.rating || 0));
         break;
       default:
         // Default recommended sorting (no specific sort)
@@ -92,6 +103,7 @@ const Search = () => {
     }
     
     setFilteredProperties(results);
+    setLoading(false);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -228,9 +240,15 @@ const Search = () => {
           </div>
 
           {/* Loading State */}
-          {loading ? (
+          {loading || isLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <h3 className="text-xl font-semibold mb-2">Error loading properties</h3>
+              <p className="text-gray-500">Please try again later</p>
+              <Button onClick={() => window.location.reload()} className="mt-4">Retry</Button>
             </div>
           ) : (
             <>

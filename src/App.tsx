@@ -1,106 +1,93 @@
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/context/AuthContext";
-import useSupabaseConfig from "@/hooks/useSupabase";
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Layouts
-import Layout from "@/components/Layout";
-import DashboardLayout from "@/components/DashboardLayout";
+// Layout and UI components
+import Layout from './components/Layout';
+import DashboardLayout from './components/DashboardLayout';
+import SupabaseProvider from './components/SupabaseProvider';
+import { Toaster } from './components/ui/toaster';
+
+// Context providers
+import { AuthProvider } from './context/AuthContext';
 
 // Pages
-import Index from "@/pages/Index";
-import Login from "@/pages/Login";
-import Signup from "@/pages/Signup";
-import Search from "@/pages/Search";
-import PropertyDetails from "@/pages/PropertyDetails";
-import Booking from "@/pages/Booking";
-import Messages from "@/pages/Messages";
-import Review from "@/pages/Review";
+import Index from './pages/Index';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Search from './pages/Search';
+import PropertyDetails from './pages/PropertyDetails';
+import Review from './pages/Review';
+import Booking from './pages/Booking';
+import Messages from './pages/Messages';
+import NotFound from './pages/NotFound';
 
 // Dashboard pages
-import FinderDashboard from "@/pages/dashboard/FinderDashboard";
-import OwnerDashboard from "@/pages/dashboard/OwnerDashboard";
-import AdminDashboard from "@/pages/dashboard/AdminDashboard";
+import FinderDashboard from './pages/dashboard/FinderDashboard';
+import OwnerDashboard from './pages/dashboard/OwnerDashboard';
+import AdminDashboard from './pages/dashboard/AdminDashboard';
+import ListProperty from './pages/owner/ListProperty';
+import EditProperty from './pages/owner/EditProperty';
 
-// Owner pages
-import ListProperty from "@/pages/owner/ListProperty";
+const App = () => {
+  const queryClient = new QueryClient();
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <SupabaseProvider queryClient={queryClient}>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Index />} />
+                <Route path="login" element={<Login />} />
+                <Route path="signup" element={<Signup />} />
+                <Route path="search" element={<Search />} />
+                <Route path="property/:id" element={<PropertyDetails />} />
+                <Route path="review/:propertyId" element={<Review />} />
+                <Route path="booking/:propertyId" element={<Booking />} />
+                <Route path="messages" element={<Messages />} />
 
-import NotFound from "@/pages/NotFound";
+                {/* Finder (normal user) routes */}
+                <Route path="dashboard" element={<DashboardLayout />}>
+                  <Route index element={<FinderDashboard />} />
+                  <Route path="saved" element={<h1>Saved Properties</h1>} />
+                  <Route path="bookings" element={<h1>My Bookings</h1>} />
+                  <Route path="messages" element={<Messages />} />
+                  <Route path="settings" element={<h1>Settings</h1>} />
+                </Route>
 
-const queryClient = new QueryClient();
+                {/* Property Owner routes */}
+                <Route path="owner" element={<DashboardLayout requiredRole="owner" />}>
+                  <Route index element={<OwnerDashboard />} />
+                  <Route path="properties" element={<h1>My Properties</h1>} />
+                  <Route path="properties/:propertyId/edit" element={<EditProperty />} />
+                  <Route path="bookings" element={<h1>Property Bookings</h1>} />
+                  <Route path="list-property" element={<ListProperty />} />
+                  <Route path="messages" element={<Messages />} />
+                  <Route path="settings" element={<h1>Settings</h1>} />
+                </Route>
 
-// Global Supabase configuration component
-const SupabaseConfig = () => {
-  useSupabaseConfig(queryClient);
-  return null;
+                {/* Admin routes */}
+                <Route path="admin" element={<DashboardLayout requiredRole="admin" />}>
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="users" element={<h1>Manage Users</h1>} />
+                  <Route path="properties" element={<h1>All Properties</h1>} />
+                  <Route path="bookings" element={<h1>All Bookings</h1>} />
+                  <Route path="messages" element={<h1>Message Center</h1>} />
+                  <Route path="settings" element={<h1>System Settings</h1>} />
+                </Route>
+
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+          <Toaster />
+        </SupabaseProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
 };
-
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <SupabaseConfig />
-        <BrowserRouter>
-          <Routes>
-            {/* Main Layout Routes */}
-            <Route element={<Layout />}>
-              <Route path="/" element={<Index />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/property/:id" element={<PropertyDetails />} />
-              <Route path="/property/:id/book" element={<Booking />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="/favorites" element={<Messages />} />
-              <Route path="/review/:id" element={<Review />} />
-            </Route>
-            
-            {/* Authentication Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            
-            {/* Finder Dashboard Routes */}
-            <Route path="/dashboard" element={<DashboardLayout requiredRole="finder" />}>
-              <Route index element={<FinderDashboard />} />
-              <Route path="saved" element={<FinderDashboard />} />
-              <Route path="bookings" element={<FinderDashboard />} />
-              <Route path="messages" element={<Messages />} />
-              <Route path="settings" element={<div>Settings</div>} />
-            </Route>
-            
-            {/* Owner Dashboard Routes */}
-            <Route path="/owner" element={<DashboardLayout requiredRole="owner" />}>
-              <Route index element={<OwnerDashboard />} />
-              <Route path="properties" element={<OwnerDashboard />} />
-              <Route path="bookings" element={<OwnerDashboard />} />
-              <Route path="messages" element={<Messages />} />
-              <Route path="settings" element={<div>Account Settings</div>} />
-            </Route>
-            
-            {/* Property Listing Route */}
-            <Route path="/owner/list-property" element={<ListProperty />} />
-            
-            {/* Admin Dashboard Routes */}
-            <Route path="/admin" element={<DashboardLayout requiredRole="admin" />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="users" element={<div>Manage Users</div>} />
-              <Route path="properties" element={<div>Manage Properties</div>} />
-              <Route path="messages" element={<Messages />} />
-              <Route path="bookings" element={<div>All Bookings</div>} />
-              <Route path="settings" element={<div>Admin Settings</div>} />
-            </Route>
-            
-            {/* 404 Route */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
 
 export default App;
