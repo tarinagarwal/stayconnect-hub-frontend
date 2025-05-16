@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/AuthContext';
+import { propertiesApi } from '@/services/api';
 
 const ListProperty = () => {
   const { currentUser } = useAuth();
@@ -25,6 +26,7 @@ const ListProperty = () => {
   const [price, setPrice] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [imageUrl, setImageUrl] = useState('');
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   
   // Amenities state
   const amenitiesList = [
@@ -52,8 +54,19 @@ const ListProperty = () => {
   const handleRemoveImage = (index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      setUploadedFiles(prev => [...prev, ...newFiles]);
+      
+      // Create preview URLs for the images
+      const fileUrls = newFiles.map(file => URL.createObjectURL(file));
+      setImages(prev => [...prev, ...fileUrls]);
+    }
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validation
@@ -83,21 +96,71 @@ const ListProperty = () => {
       });
       return;
     }
+
+    if (!currentUser) {
+      toast({
+        title: "Authentication Required",
+        description: "You must be logged in to list a property.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsSubmitting(true);
     
-    // Simulate API call to save property
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      // Create property
+      const property = await propertiesApi.create({
+        owner_id: currentUser.id,
+        title,
+        description,
+        location,
+        price: parseInt(price),
+        featured: false
+      });
+      
+      // Upload images
+      const imagePromises = uploadedFiles.map(file => 
+        propertiesApi.uploadImage(file, currentUser.id)
+      );
+      
+      // For externally added image URLs
+      const externalImageUrls = images.filter(img => !img.startsWith('blob:'));
+      
+      // Wait for all image uploads to complete
+      const uploadedImageUrls = await Promise.all(imagePromises);
+      const allImageUrls = [...uploadedImageUrls, ...externalImageUrls];
+      
+      // Add images to property
+      const imagePromises2 = allImageUrls.map((url, index) => 
+        propertiesApi.addImage(property.id, url, index)
+      );
+      
+      // Add amenities to property
+      const amenityPromises = selectedAmenities.map(amenity => 
+        propertiesApi.addAmenity(property.id, amenity)
+      );
+      
+      // Wait for all operations to complete
+      await Promise.all([...imagePromises2, ...amenityPromises]);
       
       toast({
         title: "Property Listed",
-        description: "Your property has been listed successfully!",
+        description: "Your property has been listed successfully!"
       });
       
       // Redirect to owner dashboard
       navigate('/owner');
-    }, 2000);
+    } catch (error) {
+      console.error('Error listing property:', error);
+      toast({
+        title: "Error",
+        description: "There was an error listing your property. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -170,16 +233,35 @@ const ListProperty = () => {
               <div>
                 <h3 className="text-lg font-semibold mb-4">Property Images</h3>
                 <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input
-                      value={imageUrl}
-                      onChange={(e) => setImageUrl(e.target.value)}
-                      placeholder="Enter image URL"
-                      className="flex-grow"
-                    />
-                    <Button type="button" onClick={handleAddImage}>
-                      Add Image
-                    </Button>
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <Label htmlFor="images">Upload Images</Label>
+                      <Input
+                        id="images"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleFileChange}
+                        className="pt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Upload multiple images of your property.
+                      </p>
+                    </div>
+                    
+                    <p className="text-sm font-medium">OR</p>
+                    
+                    <div className="flex gap-2">
+                      <Input
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="Enter image URL"
+                        className="flex-grow"
+                      />
+                      <Button type="button" onClick={handleAddImage}>
+                        Add Image
+                      </Button>
+                    </div>
                   </div>
                   
                   <p className="text-sm text-gray-500">

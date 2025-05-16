@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,21 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated, currentUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // If user is already authenticated, redirect to appropriate dashboard
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      const redirectPath = location.state?.from || 
+        (currentUser.role === 'admin' ? '/admin' : 
+         currentUser.role === 'owner' ? '/owner' : 
+         '/dashboard');
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAuthenticated, currentUser, navigate, location]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,17 +43,8 @@ const Login = () => {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      toast({
-        title: 'Success',
-        description: 'You have been logged in successfully.',
-      });
-      navigate('/');
+      // Navigation is handled in the useEffect
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Invalid credentials. Please try again.',
-        variant: 'destructive',
-      });
       console.error('Login error:', error);
     } finally {
       setIsSubmitting(false);

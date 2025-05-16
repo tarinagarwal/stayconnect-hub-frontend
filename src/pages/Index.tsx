@@ -1,133 +1,210 @@
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
-import PropertyList from '@/components/PropertyList';
-import { properties, generateSearchUrl } from '@/data/mockData';
+// src/pages/Index.tsx
 
-const HomeHero = () => {
-  const [searchInput, setSearchInput] = useState('');
+import React from 'react';
+import { Button } from "@/components/ui/button";
+import { Link, useNavigate } from "react-router-dom";
+import { Search, MapPin, Star } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from '@/context/AuthContext';
+import PropertyList from "@/components/PropertyList";
+import { useQuery } from '@tanstack/react-query';
+import { propertiesApi } from '@/services/api';
+
+const Index = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  // Fetch featured properties
+  const { data: properties, isLoading } = useQuery({
+    queryKey: ['featuredProperties'],
+    queryFn: propertiesApi.getAll,
+  });
+
+  // Filter featured properties only
+  const featuredProperties = properties?.filter(p => p.featured).slice(0, 6);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate(`/search?query=${encodeURIComponent(searchInput)}`);
+    navigate(`/search?query=${encodeURIComponent(searchQuery)}`);
   };
 
   return (
-    <div className="relative bg-gray-900 text-white">
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{
-          backgroundImage: `url('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2670')`,
-        }}
-      >
-        <div className="absolute inset-0 bg-black/50"></div>
-      </div>
-      
-      <div className="relative container mx-auto px-4 py-32 md:py-40 text-center">
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-6 animate-fade-in">
-          Find Your Perfect PG Accommodation
-        </h1>
-        <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto animate-fade-in">
-          Discover comfortable and affordable PG stays in top locations with verified owners
-        </p>
-        
-        <form onSubmit={handleSearch} className="max-w-2xl mx-auto animate-fade-in">
-          <div className="flex items-center bg-white rounded-full shadow-lg p-2">
-            <Search className="h-5 w-5 text-gray-500 ml-3" />
-            <Input
-              type="text"
-              placeholder="Search by location, PG name..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="flex-grow border-none focus:ring-0 text-black"
-            />
-            <Button type="submit" size="lg" className="rounded-full">
-              Search PGs
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
+    <div>
+      {/* Hero Section */}
+      <section className="relative bg-gray-900 text-white py-20">
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80"
+            alt="Apartment interior"
+            className="w-full h-full object-cover opacity-50"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black to-transparent opacity-70"></div>
+        </div>
 
-const FeaturesSection = () => {
-  return (
-    <section className="py-16 bg-gray-50">
-      <div className="container mx-auto px-4">
-        <h2 className="text-3xl font-bold text-center mb-12">Why Choose StayConnect</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="bg-white p-6 rounded-lg shadow-sm text-center">
-            <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Search className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Easy Search</h3>
-            <p className="text-gray-600">
-              Find your ideal PG accommodation with our intuitive search and filtering system.
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="max-w-2xl mx-auto text-center">
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">
+              Find Your Perfect PG Accommodation
+            </h1>
+            <p className="text-xl mb-8">
+              Discover comfortable and affordable paying guest accommodations in top locations
             </p>
-          </div>
-          
-          <div className="bg-white p-6 rounded-lg shadow-sm text-center">
-            <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8 text-primary">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Verified Listings</h3>
-            <p className="text-gray-600">
-              All our PG accommodations are verified to ensure quality and safety for our users.
-            </p>
-          </div>
-          
-          <div className="bg-white p-6 rounded-lg shadow-sm text-center">
-            <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8 text-primary">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Direct Communication</h3>
-            <p className="text-gray-600">
-              Connect directly with PG owners through our built-in messaging system for quick responses.
-            </p>
+
+            <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 justify-center">
+              <div className="relative flex-grow">
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <Input
+                  type="text"
+                  placeholder="Search by location, area..."
+                  className="pl-9 bg-white text-black h-12 rounded-md w-full"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Button type="submit" size="lg" className="h-12">
+                <Search className="mr-2 h-4 w-4" />
+                Search
+              </Button>
+            </form>
+
+            {!isAuthenticated && (
+              <div className="mt-8 space-x-4">
+                <Button asChild variant="outline" className="bg-white text-primary hover:bg-gray-100">
+                  <Link to="/login">Log in</Link>
+                </Button>
+                <Button asChild>
+                  <Link to="/signup">Create an account</Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
-      </div>
-    </section>
-  );
-};
+      </section>
 
-const Index = () => {
-  // Featured properties (filter properties with featured flag)
-  const featuredProperties = properties.filter(property => property.featured);
-  
-  // Recent properties (just take a few for display)
-  const recentProperties = [...properties].sort(() => 0.5 - Math.random()).slice(0, 3);
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <HomeHero />
-      
+      {/* Featured Properties */}
       <div className="container mx-auto px-4 py-12">
-        <PropertyList properties={featuredProperties} title="Featured PG Accommodations" />
-        <PropertyList properties={recentProperties} title="Recently Added" />
+        <PropertyList 
+          title="Featured Properties" 
+          properties={featuredProperties} 
+          isLoading={isLoading}
+          emptyMessage="No featured properties available at the moment."
+        />
       </div>
-      
-      <FeaturesSection />
-      
-      <section className="py-16 bg-primary/5">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-6">Own a PG Property?</h2>
-          <p className="text-xl mb-8 max-w-2xl mx-auto">
-            List your property on StayConnect and connect with potential tenants. It's easy, fast, and free!
-          </p>
-          <Button size="lg" onClick={() => window.location.href = '/owner/list-property'}>
-            List Your PG
-          </Button>
+
+      {/* How It Works */}
+      <section className="bg-gray-50 py-16">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">How StayConnect Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Search</h3>
+              <p className="text-gray-600">
+                Easily search for PG accommodations based on location, budget, and amenities.
+              </p>
+            </div>
+            
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Star className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Compare</h3>
+              <p className="text-gray-600">
+                Compare different PGs based on ratings, reviews, and available facilities.
+              </p>
+            </div>
+            
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Book</h3>
+              <p className="text-gray-600">
+                Book your perfect PG accommodation instantly and move in without any hassle.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* For PG Owners */}
+      <section className="py-16">
+        <div className="container mx-auto px-4">
+          <div className="bg-primary text-white rounded-xl overflow-hidden">
+            <div className="flex flex-col md:flex-row">
+              <div className="md:w-1/2 p-10 md:p-16">
+                <h2 className="text-3xl font-bold mb-6">Are you a PG Owner?</h2>
+                <p className="text-lg mb-8">
+                  List your property on StayConnect and reach thousands of potential tenants. 
+                  Manage bookings, payments, and communication all in one place.
+                </p>
+                <Button asChild variant="secondary" size="lg">
+                  <Link to={isAuthenticated ? "/owner/list-property" : "/signup"}>
+                    {isAuthenticated ? "List Your Property" : "Register as Owner"}
+                  </Link>
+                </Button>
+              </div>
+              <div className="md:w-1/2">
+                <img 
+                  src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1073&q=80" 
+                  alt="Property owner" 
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="bg-gray-50 py-16">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">What Our Users Say</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <div className="flex items-center mb-4">
+                    <div className="flex text-yellow-400">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="h-4 w-4 fill-current" />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="mb-4 text-gray-600">
+                    "StayConnect made finding a PG so easy! I found a great place near my office within my budget. The booking process was smooth and hassle-free."
+                  </p>
+                  <div className="flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-gray-300 mr-3"></div>
+                    <div>
+                      <p className="font-semibold">John Doe</p>
+                      <p className="text-sm text-gray-500">Delhi, India</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-16">
+        <div className="container mx-auto px-4">
+          <div className="bg-gradient-to-r from-primary to-primary-dark text-white rounded-xl p-10 md:p-16 text-center">
+            <h2 className="text-3xl font-bold mb-6">Ready to Find Your Perfect PG?</h2>
+            <p className="text-lg mb-8 max-w-2xl mx-auto">
+              Join thousands of satisfied users who found their ideal PG accommodation through StayConnect.
+            </p>
+            <Button asChild variant="secondary" size="lg">
+              <Link to="/search">Start Searching</Link>
+            </Button>
+          </div>
         </div>
       </section>
     </div>

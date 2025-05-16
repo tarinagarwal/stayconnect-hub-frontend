@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,19 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<UserRole>('finder');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { signup } = useAuth();
+  const { signup, isAuthenticated, currentUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // If user is already authenticated, redirect to appropriate dashboard
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      const redirectPath = currentUser.role === 'admin' ? '/admin' : 
+                          currentUser.role === 'owner' ? '/owner' : 
+                          '/dashboard';
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAuthenticated, currentUser, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,17 +65,8 @@ const Signup = () => {
     setIsSubmitting(true);
     try {
       await signup(name, email, password, role);
-      toast({
-        title: 'Success',
-        description: 'Your account has been created successfully.',
-      });
-      navigate('/');
+      // Navigation is handled in the useEffect after authentication state changes
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to create account. Please try again.',
-        variant: 'destructive',
-      });
       console.error('Signup error:', error);
     } finally {
       setIsSubmitting(false);

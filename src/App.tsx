@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import useSupabaseConfig from "@/hooks/useSupabase";
 
 // Layouts
 import Layout from "@/components/Layout";
@@ -32,12 +33,19 @@ import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Global Supabase configuration component
+const SupabaseConfig = () => {
+  useSupabaseConfig(queryClient);
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <SupabaseConfig />
         <BrowserRouter>
           <Routes>
             {/* Main Layout Routes */}
@@ -58,8 +66,8 @@ const App = () => (
             {/* Finder Dashboard Routes */}
             <Route path="/dashboard" element={<DashboardLayout requiredRole="finder" />}>
               <Route index element={<FinderDashboard />} />
-              <Route path="saved" element={<div>Saved Properties</div>} />
-              <Route path="bookings" element={<div>Bookings</div>} />
+              <Route path="saved" element={<FinderDashboard />} />
+              <Route path="bookings" element={<FinderDashboard />} />
               <Route path="messages" element={<Messages />} />
               <Route path="settings" element={<div>Settings</div>} />
             </Route>
@@ -67,8 +75,8 @@ const App = () => (
             {/* Owner Dashboard Routes */}
             <Route path="/owner" element={<DashboardLayout requiredRole="owner" />}>
               <Route index element={<OwnerDashboard />} />
-              <Route path="properties" element={<div>My Properties</div>} />
-              <Route path="bookings" element={<div>Property Bookings</div>} />
+              <Route path="properties" element={<OwnerDashboard />} />
+              <Route path="bookings" element={<OwnerDashboard />} />
               <Route path="messages" element={<Messages />} />
               <Route path="settings" element={<div>Account Settings</div>} />
             </Route>

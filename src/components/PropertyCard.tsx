@@ -1,10 +1,9 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Property } from '@/data/mockData';
+import { Property } from '@/services/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Star } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
 
 interface PropertyCardProps {
   property: Property;
@@ -12,7 +11,6 @@ interface PropertyCardProps {
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
   const { id, title, location, price, images, rating } = property;
-  const { isAuthenticated, currentUser } = useAuth();
 
   // Formatter for Indian Rupee
   const priceFormatter = new Intl.NumberFormat('en-IN', {
@@ -20,15 +18,20 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
     currency: 'INR',
     maximumFractionDigits: 0,
   });
+  
+  // Get the first image or a placeholder
+  const imageUrl = images && images.length > 0 
+    ? images[0].url 
+    : '/placeholder.svg';
 
   return (
     <Link to={`/property/${id}`} className="block">
       <Card className="property-card overflow-hidden h-full">
         <div className="property-image relative">
           <img
-            src={images[0]}
+            src={imageUrl}
             alt={title}
-            className="h-full w-full object-cover hover-scale"
+            className="h-48 w-full object-cover hover-scale"
           />
           {property.featured && (
             <span className="absolute top-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded">
@@ -44,11 +47,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property }) => {
           <div className="flex items-center mt-2 text-sm">
             <div className="flex items-center">
               <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-              <span>{rating.toFixed(1)}</span>
-            </div>
-            <div className="mx-2">·</div>
-            <div>
-              {property.reviews.length} {property.reviews.length === 1 ? 'review' : 'reviews'}
+              <span>{rating ? rating.toFixed(1) : 'No ratings'}</span>
             </div>
           </div>
           <div className="mt-3">

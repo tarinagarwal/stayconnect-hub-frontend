@@ -6,24 +6,36 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, Home, Star, Calendar, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { getMockBookings, bookings, Property, properties } from '@/data/mockData';
+import { bookingsApi, savedPropertiesApi, Property } from '@/services/api';
+import { useQuery } from '@tanstack/react-query';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const FinderDashboard = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [userBookings, setUserBookings] = useState<typeof bookings>([]);
-  const [savedProperties, setSavedProperties] = useState<Property[]>([]);
+  const [activeTab, setActiveTab] = useState('bookings');
+
+  // Fetch user bookings
+  const { 
+    data: bookings, 
+    isLoading: isLoadingBookings, 
+    error: bookingsError 
+  } = useQuery({
+    queryKey: ['bookings', currentUser?.id],
+    queryFn: () => currentUser ? bookingsApi.getByUserId(currentUser.id) : Promise.resolve([]),
+    enabled: !!currentUser
+  });
   
-  useEffect(() => {
-    if (currentUser) {
-      // Get user bookings
-      const bookings = getMockBookings(currentUser.id);
-      setUserBookings(bookings);
-      
-      // For saved properties demo, just show 2 random properties
-      setSavedProperties(properties.slice(0, 2));
-    }
-  }, [currentUser]);
+  // Fetch saved properties
+  const { 
+    data: savedProperties, 
+    isLoading: isLoadingSaved, 
+    error: savedError
+  } = useQuery({
+    queryKey: ['savedProperties', currentUser?.id],
+    queryFn: () => currentUser ? savedPropertiesApi.getSavedByUserId(currentUser.id) : Promise.resolve([]),
+    enabled: !!currentUser
+  });
 
   // Formatter for Indian Rupee
   const priceFormatter = new Intl.NumberFormat('en-IN', {
@@ -31,6 +43,15 @@ const FinderDashboard = () => {
     currency: 'INR',
     maximumFractionDigits: 0,
   });
+
+  if (!currentUser) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">You need to be logged in to view your dashboard.</p>
+        <Button onClick={() => navigate('/login')} className="mt-4">Log in</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -50,7 +71,11 @@ const FinderDashboard = () => {
               <Calendar className="h-5 w-5 text-primary" />
               <span className="font-medium">Bookings</span>
             </div>
-            <p className="text-3xl font-bold mt-2">{userBookings.length}</p>
+            {isLoadingBookings ? (
+              <Skeleton className="h-8 w-16 mt-2" />
+            ) : (
+              <p className="text-3xl font-bold mt-2">{bookings?.length || 0}</p>
+            )}
           </CardContent>
         </Card>
         
@@ -60,7 +85,11 @@ const FinderDashboard = () => {
               <Heart className="h-5 w-5 text-primary" />
               <span className="font-medium">Saved PGs</span>
             </div>
-            <p className="text-3xl font-bold mt-2">{savedProperties.length}</p>
+            {isLoadingSaved ? (
+              <Skeleton className="h-8 w-16 mt-2" />
+            ) : (
+              <p className="text-3xl font-bold mt-2">{savedProperties?.length || 0}</p>
+            )}
           </CardContent>
         </Card>
         
@@ -70,21 +99,43 @@ const FinderDashboard = () => {
               <MessageCircle className="h-5 w-5 text-primary" />
               <span className="font-medium">Unread Messages</span>
             </div>
-            <p className="text-3xl font-bold mt-2">2</p>
+            <p className="text-3xl font-bold mt-2">0</p>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="bookings">
+      <Tabs defaultValue="bookings" value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="bookings">Recent Bookings</TabsTrigger>
           <TabsTrigger value="saved">Saved PGs</TabsTrigger>
         </TabsList>
         
         <TabsContent value="bookings" className="mt-4">
-          {userBookings.length > 0 ? (
+          {isLoadingBookings ? (
+            <div className="space-y-4">
+              {[1, 2].map(i => (
+                <Card key={i}>
+                  <CardContent className="p-5">
+                    <div className="space-y-3">
+                      <Skeleton className="h-6 w-3/4" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-4 w-1/3" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : bookingsError ? (
+            <div className="text-center py-6">
+              <p className="text-red-500">Error loading bookings. Please try again.</p>
+              <Button onClick={() => setActiveTab('bookings')} className="mt-2">Retry</Button>
+            </div>
+          ) : bookings && bookings.length > 0 ? (
             <div className="grid grid-cols-1 gap-4">
-              {userBookings.map((booking) => (
+              {bookings.map((booking) => (
                 <Card key={booking.id}>
                   <CardContent className="p-0">
                     <div className="flex flex-col md:flex-row">
@@ -104,30 +155,30 @@ const FinderDashboard = () => {
                       <div className="md:w-3/4 p-5">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h3 className="text-lg font-semibold">{booking.propertyTitle}</h3>
+                            <h3 className="text-lg font-semibold">{booking.property?.title}</h3>
                             <div className="space-y-2 mt-2">
                               <div className="flex">
                                 <span className="font-medium w-24">Check In:</span>
-                                <span>{new Date(booking.checkIn).toLocaleDateString()}</span>
+                                <span>{new Date(booking.check_in).toLocaleDateString()}</span>
                               </div>
                               <div className="flex">
                                 <span className="font-medium w-24">Check Out:</span>
-                                <span>{new Date(booking.checkOut).toLocaleDateString()}</span>
+                                <span>{new Date(booking.check_out).toLocaleDateString()}</span>
                               </div>
                               <div className="flex">
                                 <span className="font-medium w-24">Amount:</span>
-                                <span>{priceFormatter.format(booking.totalPrice)}</span>
+                                <span>{priceFormatter.format(booking.total_price)}</span>
                               </div>
                             </div>
                           </div>
-                          <Button variant="outline" onClick={() => navigate(`/property/${booking.propertyId}`)}>
+                          <Button variant="outline" onClick={() => navigate(`/property/${booking.property_id}`)}>
                             View Property
                           </Button>
                         </div>
                         
                         {booking.status === 'completed' && (
                           <div className="mt-4 pt-4 border-t">
-                            <Button size="sm" onClick={() => navigate(`/review/${booking.propertyId}`)}>
+                            <Button size="sm" onClick={() => navigate(`/review/${booking.property_id}`)}>
                               <Star className="h-4 w-4 mr-2" />
                               Leave a Review
                             </Button>
@@ -148,7 +199,27 @@ const FinderDashboard = () => {
         </TabsContent>
         
         <TabsContent value="saved" className="mt-4">
-          {savedProperties.length > 0 ? (
+          {isLoadingSaved ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1, 2].map(i => (
+                <Card key={i}>
+                  <CardContent className="p-0">
+                    <Skeleton className="h-48 w-full" />
+                    <div className="p-4 space-y-2">
+                      <Skeleton className="h-5 w-3/4" />
+                      <Skeleton className="h-4 w-1/2" />
+                      <Skeleton className="h-4 w-1/4" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : savedError ? (
+            <div className="text-center py-6">
+              <p className="text-red-500">Error loading saved properties. Please try again.</p>
+              <Button onClick={() => setActiveTab('saved')} className="mt-2">Retry</Button>
+            </div>
+          ) : savedProperties && savedProperties.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {savedProperties.map((property) => (
                 <Card key={property.id} className="overflow-hidden">
@@ -156,7 +227,7 @@ const FinderDashboard = () => {
                     <div className="flex flex-col">
                       <div className="h-48 overflow-hidden">
                         <img
-                          src={property.images[0]}
+                          src={property.images && property.images.length > 0 ? property.images[0].url : '/placeholder.svg'}
                           alt={property.title}
                           className="h-full w-full object-cover hover-scale"
                         />
@@ -166,7 +237,7 @@ const FinderDashboard = () => {
                         <p className="text-sm text-gray-600 mt-1">{property.location}</p>
                         <div className="flex items-center mt-2">
                           <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span className="ml-1 text-sm">{property.rating.toFixed(1)}</span>
+                          <span className="ml-1 text-sm">{property.rating?.toFixed(1) || 'No ratings'}</span>
                         </div>
                         <div className="mt-3 flex items-center justify-between">
                           <span className="font-medium">{priceFormatter.format(property.price)}/month</span>
