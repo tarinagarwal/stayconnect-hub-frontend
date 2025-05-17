@@ -5,16 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { Property, propertiesApi } from '@/services/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const EditProperty = () => {
-  const { propertyId } = useParams<{ propertyId: string }>();
+  const { id: propertyId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAuth();
@@ -34,14 +34,36 @@ const EditProperty = () => {
   // Fetch property data
   const { data: property, isLoading, error } = useQuery({
     queryKey: ['property', propertyId],
-    queryFn: () => propertyId ? propertiesApi.getById(propertyId) : null,
+    queryFn: async () => {
+      if (!propertyId) return null;
+      
+      const { data: propertyData, error: propertyError } = await supabase
+        .from('properties')
+        .select(`
+          *,
+          amenities:property_amenities(*),
+          images:property_images(*)
+        `)
+        .eq('id', propertyId)
+        .single();
+      
+      if (propertyError) throw propertyError;
+      return propertyData;
+    },
     enabled: !!propertyId
   });
   
   // Update property mutation
   const updatePropertyMutation = useMutation({
-    mutationFn: (updatedProperty: Partial<Property>) => 
-      propertiesApi.update(propertyId!, updatedProperty),
+    mutationFn: async (updatedProperty: any) => {
+      const { data, error } = await supabase
+        .from('properties')
+        .update(updatedProperty)
+        .eq('id', propertyId);
+      
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property', propertyId] });
       queryClient.invalidateQueries({ queryKey: ['ownerProperties'] });
@@ -54,7 +76,14 @@ const EditProperty = () => {
   
   // Delete property mutation
   const deletePropertyMutation = useMutation({
-    mutationFn: () => propertiesApi.delete(propertyId!),
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('properties')
+        .delete()
+        .eq('id', propertyId!);
+      
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ownerProperties'] });
       toast({
@@ -67,7 +96,16 @@ const EditProperty = () => {
   
   // Add amenity mutation
   const addAmenityMutation = useMutation({
-    mutationFn: (amenity: string) => propertiesApi.addAmenity(propertyId!, amenity),
+    mutationFn: async (amenity: string) => {
+      const { data, error } = await supabase
+        .from('property_amenities')
+        .insert([
+          { property_id: propertyId, amenity }
+        ]);
+      
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property', propertyId] });
       setNewAmenity('');
@@ -80,7 +118,14 @@ const EditProperty = () => {
   
   // Delete amenity mutation
   const deleteAmenityMutation = useMutation({
-    mutationFn: (amenityId: string) => propertiesApi.deleteAmenity(amenityId),
+    mutationFn: async (amenityId: string) => {
+      const { error } = await supabase
+        .from('property_amenities')
+        .delete()
+        .eq('id', amenityId);
+      
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property', propertyId] });
       toast({
@@ -92,7 +137,14 @@ const EditProperty = () => {
   
   // Delete image mutation
   const deleteImageMutation = useMutation({
-    mutationFn: (imageId: string) => propertiesApi.deleteImage(imageId),
+    mutationFn: async (imageId: string) => {
+      const { error } = await supabase
+        .from('property_images')
+        .delete()
+        .eq('id', imageId);
+      
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property', propertyId] });
       toast({
@@ -169,13 +221,37 @@ const EditProperty = () => {
   };
   
   const handleImageUpload = async () => {
-    if (!imageFiles.length) return;
+    if (!imageFiles.length || !currentUser) return;
     
     setUploading(true);
     try {
       for (const file of imageFiles) {
-        const imageUrl = await propertiesApi.uploadImage(file, currentUser!.id);
-        await propertiesApi.addImage(propertyId!, imageUrl);
+        // Generate a unique file name to avoid collisions
+        const fileName = `${Date.now()}-${file.name.replace(/\s/g, '_')}`;
+        
+        // Upload to Supabase Storage
+        const { data: fileData, error: fileError } = await supabase.storage
+          .from('property_images')
+          .upload(fileName, file);
+        
+        if (fileError) throw fileError;
+        
+        // Get public URL
+        const { data: urlData } = await supabase.storage
+          .from('property_images')
+          .getPublicUrl(fileName);
+        
+        // Add to property_images table
+        const { error: dbError } = await supabase
+          .from('property_images')
+          .insert([
+            { 
+              property_id: propertyId,
+              url: urlData.publicUrl
+            }
+          ]);
+        
+        if (dbError) throw dbError;
       }
       
       setImageFiles([]);

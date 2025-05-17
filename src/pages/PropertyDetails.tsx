@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, Star, MapPin, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Property, propertiesApi } from '@/services/api';
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const PropertyDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,10 +30,34 @@ const PropertyDetails = () => {
 
   // Fetch property data from Supabase
   const { data: property, isLoading, error } = useQuery({
-    queryKey: ['property', id],
-    queryFn: () => id ? propertiesApi.getById(id) : null,
+    queryKey: ['propertyDetails', id],
+    queryFn: async () => {
+      if (!id) return null;
+      
+      const { data, error } = await supabase
+        .from('properties')
+        .select(`
+          *,
+          owner:profiles!properties_owner_id_fkey(*),
+          images:property_images(*),
+          amenities:property_amenities(*),
+          reviews:reviews(*, user:profiles(*))
+        `)
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
     enabled: !!id
   });
+
+  // Calculate average rating
+  const calculateRating = (reviews) => {
+    if (!reviews || reviews.length === 0) return 0;
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    return totalRating / reviews.length;
+  };
 
   // Show loading state while fetching data
   if (isLoading) {
@@ -113,6 +137,9 @@ const PropertyDetails = () => {
 
   // Ensure we have a valid reviews array
   const reviews = property.reviews || [];
+  
+  // Check if current user is the owner of this property
+  const isOwner = currentUser && currentUser.id === property.owner_id;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -126,7 +153,7 @@ const PropertyDetails = () => {
           </div>
           <div className="flex items-center">
             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-            <span>{property.rating ? property.rating.toFixed(1) : "No ratings"} ({reviews.length} reviews)</span>
+            <span>{calculateRating(reviews).toFixed(1)} ({reviews.length} reviews)</span>
           </div>
         </div>
       </div>
@@ -194,14 +221,18 @@ const PropertyDetails = () => {
             <TabsContent value="amenities">
               <h3 className="text-xl font-semibold mb-4">Available Amenities</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {property.amenities && property.amenities.map((amenity, index) => (
-                  <div key={index} className="flex items-center">
+                {property.amenities && property.amenities.map((amenity) => (
+                  <div key={amenity.id} className="flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     <span>{amenity.amenity}</span>
                   </div>
                 ))}
+                
+                {(!property.amenities || property.amenities.length === 0) && (
+                  <div className="col-span-3 text-gray-500">No amenities listed for this property.</div>
+                )}
               </div>
             </TabsContent>
             
@@ -255,91 +286,123 @@ const PropertyDetails = () => {
           </Tabs>
         </div>
 
-        {/* Right Column - Booking Card */}
-        <div>
-          <Card className="sticky top-24">
-            <CardContent className="p-6">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold mb-2">{priceFormatter.format(property.price)}<span className="text-gray-500 text-sm"> / month</span></h3>
-              </div>
-
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Move-in Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {checkInDate ? (
-                          format(checkInDate, "PPP")
-                        ) : (
-                          <span>Select date</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={checkInDate}
-                        onSelect={setCheckInDate}
-                        initialFocus
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
+        {/* Right Column - Booking Card (only show for non-owners) */}
+        {!isOwner && (
+          <div>
+            <Card className="sticky top-24">
+              <CardContent className="p-6">
+                <div className="mb-4">
+                  <h3 className="text-xl font-semibold mb-2">{priceFormatter.format(property.price)}<span className="text-gray-500 text-sm"> / month</span></h3>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Move-out Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {checkOutDate ? (
-                          format(checkOutDate, "PPP")
-                        ) : (
-                          <span>Select date</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={checkOutDate}
-                        onSelect={setCheckOutDate}
-                        initialFocus
-                        disabled={(date) => 
-                          !checkInDate || date < checkInDate
-                        }
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Move-in Date</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-left"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {checkInDate ? (
+                            format(checkInDate, "PPP")
+                          ) : (
+                            <span>Select date</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={checkInDate}
+                          onSelect={setCheckInDate}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
 
-              <div className="space-y-2">
-                <Button className="w-full" onClick={handleBookNow}>
-                  Book Now
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={handleContactOwner}
-                >
-                  <MessageCircle className="h-4 w-4 mr-2" />
-                  Contact Owner
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Move-out Date</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-left"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {checkOutDate ? (
+                            format(checkOutDate, "PPP")
+                          ) : (
+                            <span>Select date</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={checkOutDate}
+                          onSelect={setCheckOutDate}
+                          initialFocus
+                          disabled={(date) => 
+                            !checkInDate || date < checkInDate
+                          }
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Button className="w-full" onClick={handleBookNow}>
+                    Book Now
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={handleContactOwner}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Contact Owner
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        
+        {/* For owner view, show different options */}
+        {isOwner && (
+          <div>
+            <Card className="sticky top-24">
+              <CardContent className="p-6">
+                <div className="mb-4">
+                  <h3 className="text-xl font-semibold mb-2">Your Property</h3>
+                  <p className="text-gray-500">You are the owner of this property.</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Button 
+                    className="w-full" 
+                    onClick={() => navigate(`/owner/properties/${id}/edit`)}
+                  >
+                    Edit Property
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => navigate('/owner/bookings')}
+                  >
+                    View Bookings
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

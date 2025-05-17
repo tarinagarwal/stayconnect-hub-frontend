@@ -1,436 +1,529 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/context/AuthContext';
-import { formatDistanceToNow } from 'date-fns';
-import { Send, Loader2, Plus, User } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { messagesApi } from '@/services/api';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, Send, UserPlus } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Dialog, 
   DialogContent, 
+  DialogDescription, 
   DialogHeader, 
-  DialogTitle,
-  DialogTrigger,
-  DialogDescription,
+  DialogTitle, 
+  DialogTrigger 
 } from '@/components/ui/dialog';
-import { usersApi } from '@/services/api';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface Conversation {
+  id: string;
+  created_at: string;
+  participants: User[];
+  last_message?: Message;
+}
+
+interface User {
+  id: string;
+  name: string;
+  avatar?: string;
+  role?: string;
+  email?: string;
+}
+
+interface Message {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  read: boolean;
+  conversation_id: string;
+}
 
 const Messages = () => {
-  const { currentUser } = useAuth();
-  const [searchParams] = useSearchParams();
+  const { currentUser, isAuthenticated } = useAuth();
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [messageText, setMessageText] = useState('');
+  const navigate = useNavigate();
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [newMessage, setNewMessage] = useState('');
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [targetUserId, setTargetUserId] = useState<string | null>(null);
-  const [newConversationDialogOpen, setNewConversationDialogOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const location = useLocation();
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Fetch all users for new conversation dialog
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: usersApi.getAllUsers,
-    enabled: !!currentUser
+  // Get owner from query params if available
+  const queryParams = new URLSearchParams(location.search);
+  const ownerIdParam = queryParams.get('owner');
+  
+  const [showNewConversationDialog, setShowNewConversationDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // Fetch conversations
+  const { data: conversations, isLoading: loadingConversations } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: async () => {
+      if (!currentUser?.id) return [];
+      
+      const { data: participantData, error: participantError } = await supabase
+        .from('conversation_participants')
+        .select(`
+          conversation_id,
+          conversation:conversations(
+            id,
+            created_at
+          )
+        `)
+        .eq('user_id', currentUser.id);
+      
+      if (participantError) throw participantError;
+      
+      if (!participantData || participantData.length === 0) return [];
+      
+      const conversationIds = participantData.map(p => p.conversation_id);
+      
+      // For each conversation, get the participants and the last message
+      const conversationsWithDetails = await Promise.all(
+        participantData.map(async (p) => {
+          // Get participants
+          const { data: participantsData, error: partError } = await supabase
+            .from('conversation_participants')
+            .select(`
+              user:profiles(
+                id, 
+                name,
+                avatar,
+                role
+              )
+            `)
+            .eq('conversation_id', p.conversation_id);
+          
+          if (partError) throw partError;
+          
+          // Get last message
+          const { data: lastMessageData, error: msgError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', p.conversation_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          
+          // Don't throw error here as conversation might not have messages yet
+          const participants = participantsData.map(pd => pd.user);
+          
+          return {
+            ...p.conversation,
+            participants,
+            last_message: msgError ? null : lastMessageData
+          };
+        })
+      );
+      
+      return conversationsWithDetails;
+    },
+    enabled: isAuthenticated
   });
-
-  // Fetch conversations for current user
-  const { 
-    data: conversations, 
-    isLoading: conversationsLoading 
-  } = useQuery({
-    queryKey: ['conversations', currentUser?.id],
-    queryFn: () => currentUser ? messagesApi.getConversations(currentUser.id) : Promise.resolve([]),
-    enabled: !!currentUser
+  
+  // Fetch messages for selected conversation
+  const { data: messages, isLoading: loadingMessages } = useQuery({
+    queryKey: ['messages', selectedConversation?.id],
+    queryFn: async () => {
+      if (!selectedConversation?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', selectedConversation.id)
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedConversation?.id
   });
-
-  // Fetch messages for active conversation
-  const { 
-    data: messages, 
-    isLoading: messagesLoading 
-  } = useQuery({
-    queryKey: ['messages', activeConversationId],
-    queryFn: () => activeConversationId ? messagesApi.getMessages(activeConversationId) : Promise.resolve([]),
-    enabled: !!activeConversationId,
-    // Real-time updates (poll every 3 seconds)
-    refetchInterval: 3000
+  
+  // Fetch available users for starting a new conversation
+  const { data: availableUsers, isLoading: loadingUsers } = useQuery({
+    queryKey: ['availableUsers'],
+    queryFn: async () => {
+      if (!currentUser?.id) return [];
+      
+      // Get users based on the current user's role
+      let query = supabase
+        .from('profiles')
+        .select('id, name, role, avatar')
+        .neq('id', currentUser.id);
+      
+      // Filter users based on role
+      if (currentUser.role === 'finder') {
+        query = query.eq('role', 'owner');
+      } else if (currentUser.role === 'owner') {
+        query = query.eq('role', 'finder');
+      }
+      // Admins can talk to anyone
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: isAuthenticated && showNewConversationDialog
   });
-
+  
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async (message: { conversation_id: string, sender_id: string, content: string }) => {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([message])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?.id] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setMessageText('');
+      
+      // Scroll to bottom
+      setTimeout(() => {
+        if (scrollAreaRef.current) {
+          scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+        }
+      }, 100);
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: `Failed to send message: ${error.message}`,
+        variant: 'destructive',
+      });
+    }
+  });
+  
   // Create conversation mutation
   const createConversationMutation = useMutation({
-    mutationFn: (participants: string[]) => messagesApi.createConversation(participants),
+    mutationFn: async (userId: string) => {
+      if (!currentUser) throw new Error("You must be logged in");
+      
+      // First create the conversation
+      const { data: conversationData, error: convError } = await supabase
+        .from('conversations')
+        .insert({})
+        .select()
+        .single();
+      
+      if (convError) throw convError;
+      
+      // Then add participants
+      const participants = [
+        { conversation_id: conversationData.id, user_id: currentUser.id },
+        { conversation_id: conversationData.id, user_id: userId }
+      ];
+      
+      const { error: partError } = await supabase
+        .from('conversation_participants')
+        .insert(participants);
+      
+      if (partError) throw partError;
+      
+      return {
+        ...conversationData, 
+        participants: [
+          currentUser,
+          availableUsers?.find(u => u.id === userId)
+        ]
+      };
+    },
     onSuccess: (data) => {
-      setActiveConversationId(data.id);
-      queryClient.invalidateQueries({ queryKey: ['conversations', currentUser?.id] });
-      setNewConversationDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setSelectedConversation(data);
+      setShowNewConversationDialog(false);
       toast({
-        title: "New conversation created",
-        description: "You can now start messaging"
+        title: 'Success',
+        description: 'Conversation created successfully',
       });
     },
     onError: (error) => {
       console.error("Error creating conversation:", error);
       toast({
-        title: "Error",
-        description: "Failed to create conversation. Please try again.",
-        variant: "destructive"
+        title: 'Error',
+        description: `Failed to create conversation: ${error.message}`,
+        variant: 'destructive',
       });
     }
   });
-
-  // Send message mutation
-  const sendMessageMutation = useMutation({
-    mutationFn: ({ conversationId, content }: { conversationId: string, content: string }) => 
-      messagesApi.sendMessage(conversationId, currentUser!.id, content),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
-      setNewMessage('');
-    }
-  });
-
-  // Handle initial params and conversation setup
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Check if we have a target user ID from URL params
-    const ownerId = searchParams.get('owner');
-    if (ownerId) {
-      setTargetUserId(ownerId);
-      
-      // Check if we already have a conversation with this user
-      const existingConversation = conversations?.find(conv => 
-        conv.participants.some(p => p.id === ownerId)
-      );
-      
-      if (existingConversation) {
-        setActiveConversationId(existingConversation.id);
-      } else if (!createConversationMutation.isPending && currentUser.id !== ownerId) {
-        // Create a new conversation
-        createConversationMutation.mutate([currentUser.id, ownerId]);
-      }
-    } else if (conversations && conversations.length > 0 && !activeConversationId) {
-      // If no specific conversation is requested, select first conversation by default
-      setActiveConversationId(conversations[0].id);
-    }
-  }, [currentUser, searchParams, conversations, createConversationMutation, activeConversationId]);
-
-  // Scroll to bottom of messages when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleSelectConversation = (conversationId: string) => {
-    setActiveConversationId(conversationId);
-  };
-
+  
+  // Handle sending a message
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newMessage.trim() || !activeConversationId || !currentUser) {
-      return;
-    }
+    if (!messageText.trim() || !selectedConversation?.id || !currentUser) return;
     
-    sendMessageMutation.mutate({ 
-      conversationId: activeConversationId, 
-      content: newMessage.trim() 
+    sendMessageMutation.mutate({
+      conversation_id: selectedConversation.id,
+      sender_id: currentUser.id,
+      content: messageText.trim()
     });
   };
-
-  const handleCreateNewConversation = () => {
-    if (!currentUser || !selectedUserId || selectedUserId === currentUser.id) {
-      toast({
-        title: "Invalid selection",
-        description: "Please select a valid user to chat with",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Check if conversation already exists
-    const existingConversation = conversations?.find(conv => 
-      conv.participants.some(p => p.id === selectedUserId)
-    );
-    
-    if (existingConversation) {
-      setActiveConversationId(existingConversation.id);
-      setNewConversationDialogOpen(false);
-    } else {
-      createConversationMutation.mutate([currentUser.id, selectedUserId]);
-    }
-  };
-
-  const getOtherParticipant = (conversationParticipants: any[]) => {
-    if (!currentUser) return null;
-    
-    return conversationParticipants.find(
-      p => p.id !== currentUser.id
-    );
+  
+  // Start new conversation with a user
+  const startConversation = (user: User) => {
+    createConversationMutation.mutate(user.id);
   };
   
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase();
+  // Effect to auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messages && scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
+  }, [messages]);
+  
+  // Effect to handle owner id param from URL
+  useEffect(() => {
+    if (ownerIdParam && currentUser && conversations) {
+      // Check if we already have a conversation with this owner
+      const existingConversation = conversations.find(conv => 
+        conv.participants.some(p => p.id === ownerIdParam)
+      );
+      
+      if (existingConversation) {
+        setSelectedConversation(existingConversation);
+      } else if (currentUser.id !== ownerIdParam) {
+        // Create a new conversation
+        createConversationMutation.mutate(ownerIdParam);
+      }
+    }
+  }, [ownerIdParam, currentUser, conversations]);
+  
+  // Select message participant that isn't the current user
+  const getOtherParticipant = (conversation: Conversation) => {
+    return conversation.participants.find(p => p.id !== currentUser?.id) || conversation.participants[0];
   };
-
-  // Handle unauthorized access
-  if (!currentUser) {
+  
+  if (!isAuthenticated) {
     return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <h1 className="text-2xl font-bold mb-6">Messages</h1>
-        <p className="text-gray-500">Please log in to view your messages</p>
+      <div className="container mx-auto px-4 py-16 text-center">
+        <h2 className="text-2xl font-bold mb-4">You need to be logged in</h2>
+        <p className="mb-6">Please log in to view your messages.</p>
+        <Button onClick={() => navigate('/login')}>Log In</Button>
       </div>
     );
   }
-
-  // Filter out current user from new conversation list
-  const otherUsers = users?.filter(user => user.id !== currentUser.id) || [];
-
+  
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Messages</h1>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(80vh-6rem)]">
-        {/* Conversations List */}
-        <div className="bg-white rounded-lg border overflow-hidden">
-          <div className="p-4 flex justify-between items-center">
-            <h2 className="font-semibold text-lg">Conversations</h2>
-            <Dialog open={newConversationDialogOpen} onOpenChange={setNewConversationDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Chat
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Start a new conversation</DialogTitle>
-                  <DialogDescription>
-                    Select a user to start chatting with them
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
-                  <Label htmlFor="user-select">Select a user to chat with</Label>
-                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                    <SelectTrigger className="w-full mt-2">
-                      <SelectValue placeholder="Select a user..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {otherUsers.map(user => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setNewConversationDialogOpen(false)}>
-                    Cancel
+      <div className="flex flex-col h-[calc(100vh-200px)] rounded-lg border">
+        <div className="grid grid-cols-1 md:grid-cols-3 h-full">
+          {/* Conversations List */}
+          <div className="border-r md:col-span-1 overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="font-semibold text-lg">Conversations</h2>
+              <Dialog open={showNewConversationDialog} onOpenChange={setShowNewConversationDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <UserPlus className="h-5 w-5" />
                   </Button>
-                  <Button onClick={handleCreateNewConversation} disabled={!selectedUserId}>
-                    Start Conversation
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>New Conversation</DialogTitle>
+                    <DialogDescription>
+                      Select a user to start a conversation with.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="max-h-96 overflow-y-auto space-y-2 py-4">
+                    {loadingUsers && <p className="text-center py-4">Loading users...</p>}
+                    
+                    {!loadingUsers && availableUsers?.length === 0 && (
+                      <p className="text-center py-4 text-gray-500">No users available to chat with.</p>
+                    )}
+                    
+                    {availableUsers?.map(user => (
+                      <div 
+                        key={user.id}
+                        className="flex items-center p-3 hover:bg-gray-100 rounded-md cursor-pointer"
+                        onClick={() => startConversation(user)}
+                      >
+                        <Avatar className="h-10 w-10 mr-3">
+                          <AvatarImage src={user.avatar || ''} />
+                          <AvatarFallback>{user.name?.charAt(0) || 'U'}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{user.name}</p>
+                          <p className="text-xs text-gray-500">{user.role}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <ScrollArea className="h-[calc(100%-65px)]">
+              {loadingConversations ? (
+                <div className="flex justify-center items-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              ) : conversations && conversations.length > 0 ? (
+                <div className="space-y-1 p-1">
+                  {conversations.map(conversation => {
+                    const otherPerson = getOtherParticipant(conversation);
+                    const isSelected = selectedConversation?.id === conversation.id;
+                    
+                    return (
+                      <div
+                        key={conversation.id}
+                        className={`flex items-center p-3 rounded-md cursor-pointer hover:bg-gray-100 ${
+                          isSelected ? 'bg-gray-100' : ''
+                        }`}
+                        onClick={() => setSelectedConversation(conversation)}
+                      >
+                        <Avatar className="h-10 w-10 mr-3">
+                          <AvatarImage src={otherPerson?.avatar || ''} />
+                          <AvatarFallback>{otherPerson?.name?.charAt(0) || 'U'}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium truncate">{otherPerson?.name}</p>
+                            {conversation.last_message && (
+                              <span className="text-xs text-gray-500">
+                                {new Date(conversation.last_message.created_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          {conversation.last_message ? (
+                            <p className="text-sm text-gray-500 truncate">
+                              {conversation.last_message.sender_id === currentUser?.id ? 'You: ' : ''}
+                              {conversation.last_message.content}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-gray-400">No messages yet</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                  <p className="text-gray-500 mb-4">No conversations yet.</p>
+                  <Button onClick={() => setShowNewConversationDialog(true)}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Start New Conversation
                   </Button>
                 </div>
-              </DialogContent>
-            </Dialog>
+              )}
+            </ScrollArea>
           </div>
-          <Separator />
-          <div className="overflow-y-auto h-[calc(80vh-12rem)]">
-            {conversationsLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : conversations && conversations.length > 0 ? (
-              conversations.map((conversation) => {
-                const otherParticipant = getOtherParticipant(conversation.participants);
-                return (
-                  <div
-                    key={conversation.id}
-                    onClick={() => handleSelectConversation(conversation.id)}
-                    className={`p-4 flex items-center gap-3 cursor-pointer ${
-                      activeConversationId === conversation.id
-                        ? 'bg-primary/5'
-                        : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <Avatar>
-                      {otherParticipant?.avatar && (
-                        <AvatarImage src={otherParticipant.avatar} alt={otherParticipant?.name} />
-                      )}
+          
+          {/* Messages Content */}
+          <div className="md:col-span-2 flex flex-col h-full">
+            {selectedConversation ? (
+              <>
+                {/* Chat Header */}
+                <div className="p-4 border-b flex items-center">
+                  <Button variant="ghost" size="icon" className="md:hidden mr-2" onClick={() => setSelectedConversation(null)}>
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  
+                  <div className="flex items-center">
+                    <Avatar className="h-10 w-10 mr-3">
+                      <AvatarImage src={getOtherParticipant(selectedConversation)?.avatar || ''} />
                       <AvatarFallback>
-                        {otherParticipant ? getInitials(otherParticipant.name) : '?'}
+                        {getOtherParticipant(selectedConversation)?.name?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between">
-                        <p className="font-medium truncate">
-                          {otherParticipant?.name || 'Unknown User'}
-                        </p>
-                        {conversation.last_message && (
-                          <span className="text-xs text-gray-500">
-                            {formatDistanceToNow(new Date(conversation.last_message.created_at), {
-                              addSuffix: true,
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 truncate">
-                        {conversation.last_message?.content || 'No messages yet'}
-                      </p>
+                    <div>
+                      <p className="font-medium">{getOtherParticipant(selectedConversation)?.name}</p>
+                      <p className="text-xs text-gray-500">{getOtherParticipant(selectedConversation)?.role}</p>
                     </div>
-                    {/* We'd need to implement unread counts properly */}
                   </div>
-                );
-              })
+                </div>
+                
+                {/* Messages */}
+                <div className="flex-1 overflow-hidden p-4">
+                  <ScrollArea className="h-full" ref={scrollAreaRef}>
+                    {loadingMessages ? (
+                      <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                      </div>
+                    ) : messages && messages.length > 0 ? (
+                      <div className="space-y-4">
+                        {messages.map(message => {
+                          const isCurrentUser = message.sender_id === currentUser?.id;
+                          
+                          return (
+                            <div 
+                              key={message.id}
+                              className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div 
+                                className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                                  isCurrentUser
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100'
+                                }`}
+                              >
+                                <p>{message.content}</p>
+                                <p className={`text-xs mt-1 ${
+                                  isCurrentUser ? 'text-white/80' : 'text-gray-500'
+                                }`}>
+                                  {new Date(message.created_at).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex justify-center items-center h-full">
+                        <p className="text-gray-500">No messages yet. Start the conversation!</p>
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+                
+                {/* Message Input */}
+                <div className="border-t p-4">
+                  <form onSubmit={handleSendMessage} className="flex space-x-2">
+                    <Input
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      placeholder="Type your message..."
+                      className="flex-1"
+                    />
+                    <Button type="submit" disabled={!messageText.trim() || sendMessageMutation.isPending}>
+                      {sendMessageMutation.isPending ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                      ) : (
+                        <Send className="h-5 w-5" />
+                      )}
+                    </Button>
+                  </form>
+                </div>
+              </>
             ) : (
-              <div className="p-4 text-center text-gray-500">
-                No conversations yet. Start a new one!
+              <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                <h3 className="text-xl font-medium mb-2">Select a conversation</h3>
+                <p className="text-gray-500 mb-4">Choose a conversation from the sidebar or start a new one.</p>
+                <Button onClick={() => setShowNewConversationDialog(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Start New Conversation
+                </Button>
               </div>
             )}
           </div>
         </div>
-        
-        {/* Messages Display */}
-        <div className="lg:col-span-2 bg-white rounded-lg border overflow-hidden flex flex-col">
-          {activeConversationId ? (
-            <>
-              {/* Conversation Header */}
-              <div className="p-4 flex items-center gap-3 border-b">
-                {messagesLoading || !conversations ? (
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    <span>Loading...</span>
-                  </div>
-                ) : (
-                  <>
-                    {(() => {
-                      const conversation = conversations.find(c => c.id === activeConversationId);
-                      const otherParticipant = conversation ? getOtherParticipant(conversation.participants) : null;
-                      
-                      return (
-                        <>
-                          <Avatar>
-                            {otherParticipant?.avatar && (
-                              <AvatarImage src={otherParticipant.avatar} alt={otherParticipant.name} />
-                            )}
-                            <AvatarFallback>
-                              {otherParticipant ? getInitials(otherParticipant.name) : '?'}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <h2 className="font-semibold">
-                              {otherParticipant?.name || 'Unknown User'}
-                            </h2>
-                            <p className="text-xs text-gray-500">
-                              {otherParticipant?.role || ''}
-                            </p>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
-              </div>
-              
-              {/* Messages */}
-              <div className="flex-grow p-4 overflow-y-auto bg-gray-50">
-                {messagesLoading ? (
-                  <div className="flex justify-center items-center h-full">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  </div>
-                ) : messages && messages.length > 0 ? (
-                  <div className="space-y-4">
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${
-                          message.sender_id === currentUser.id ? 'justify-end' : 'justify-start'
-                        }`}
-                      >
-                        <div
-                          className={`max-w-[80%] px-4 py-2 rounded-lg ${
-                            message.sender_id === currentUser.id
-                              ? 'bg-primary text-white rounded-br-none'
-                              : 'bg-gray-200 rounded-bl-none'
-                          }`}
-                        >
-                          <p>{message.content}</p>
-                          <p
-                            className={`text-xs mt-1 ${
-                              message.sender_id === currentUser.id
-                                ? 'text-white/70'
-                                : 'text-gray-500'
-                            }`}
-                          >
-                            {formatDistanceToNow(new Date(message.created_at), {
-                              addSuffix: true,
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={messagesEndRef} />
-                  </div>
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <p className="text-gray-500">No messages yet. Say hello!</p>
-                  </div>
-                )}
-              </div>
-              
-              {/* Message Input */}
-              <div className="p-4 border-t">
-                <form onSubmit={handleSendMessage} className="flex gap-2">
-                  <Input
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    className="flex-grow"
-                    disabled={sendMessageMutation.isPending}
-                  />
-                  <Button type="submit" disabled={sendMessageMutation.isPending}>
-                    {sendMessageMutation.isPending ? 
-                      <Loader2 className="h-4 w-4 animate-spin" /> : 
-                      <Send className="h-4 w-4" />
-                    }
-                  </Button>
-                </form>
-              </div>
-            </>
-          ) : (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center p-4">
-                <h3 className="font-semibold mb-2">No conversation selected</h3>
-                <p className="text-gray-500">
-                  Select a conversation from the list or start a new one
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
-  );
-};
-
-// Add the missing Label component
-const Label = ({ htmlFor, children, className = "" }: { htmlFor?: string; children: React.ReactNode; className?: string }) => {
-  return (
-    <label htmlFor={htmlFor} className={`text-sm font-medium text-gray-700 ${className}`}>
-      {children}
-    </label>
   );
 };
 
