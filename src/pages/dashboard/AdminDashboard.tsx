@@ -1,383 +1,255 @@
 
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
-import {
-  Home,
-  Users,
-  MessageCircle,
-  Calendar,
-  TrendingUp,
-} from 'lucide-react';
-import { properties, bookings } from '@/data/mockData';
-
-// Mock data for charts
-const monthlyData = [
-  { name: 'Jan', value: 12 },
-  { name: 'Feb', value: 19 },
-  { name: 'Mar', value: 28 },
-  { name: 'Apr', value: 25 },
-  { name: 'May', value: 34 },
-  { name: 'Jun', value: 40 },
-];
-
-const propertyTypeData = [
-  { name: 'Single Room', value: 15 },
-  { name: 'Double Room', value: 8 },
-  { name: 'Studio', value: 12 },
-  { name: '1BHK', value: 5 },
-  { name: '2BHK', value: 3 },
-];
-
-const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE'];
+import { useQuery } from '@tanstack/react-query';
+import { usersApi, propertiesApi, bookingsApi } from '@/services/api';
+import { MapPin, Home, User, Calendar, MessageCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const AdminDashboard = () => {
-  const [selectedTab, setSelectedTab] = useState('overview');
-
-  // Formatter for Indian Rupee
-  const priceFormatter = new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
+  // Fetch users
+  const { data: users, isLoading: usersLoading } = useQuery({
+    queryKey: ['allUsers'],
+    queryFn: usersApi.getAllUsers
   });
 
-  // Calculate total revenue
-  const totalRevenue = bookings.reduce((sum, booking) => sum + booking.totalPrice, 0);
+  // Fetch properties
+  const { data: properties, isLoading: propertiesLoading } = useQuery({
+    queryKey: ['allProperties'],
+    queryFn: propertiesApi.getAll
+  });
 
-  const usersList = [
-    { id: '1', name: 'John Finder', email: 'finder@example.com', role: 'finder', joined: '2023-01-15' },
-    { id: '2', name: 'Mary Owner', email: 'owner@example.com', role: 'owner', joined: '2023-02-20' },
-    { id: '3', name: 'Admin User', email: 'admin@example.com', role: 'admin', joined: '2022-12-01' },
-    { id: '4', name: 'Sarah Smith', email: 'sarah@example.com', role: 'finder', joined: '2023-03-10' },
-    { id: '5', name: 'David Jones', email: 'david@example.com', role: 'owner', joined: '2023-04-05' },
-  ];
+  // User roles data for chart
+  const userRolesData = React.useMemo(() => {
+    if (!users) return [];
+    
+    const roleCount: Record<string, number> = {};
+    users.forEach(user => {
+      const role = user.role;
+      roleCount[role] = (roleCount[role] || 0) + 1;
+    });
+    
+    return Object.entries(roleCount).map(([name, value]) => ({ name, value }));
+  }, [users]);
+
+  // Most recent properties
+  const recentProperties = React.useMemo(() => {
+    if (!properties) return [];
+    
+    return [...properties]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
+  }, [properties]);
+
+  // Count users by role
+  const userCounts = React.useMemo(() => {
+    if (!users) return { total: 0, finder: 0, owner: 0, admin: 0 };
+    
+    const counts = {
+      total: users.length,
+      finder: users.filter(user => user.role === 'finder').length,
+      owner: users.filter(user => user.role === 'owner').length,
+      admin: users.filter(user => user.role === 'admin').length
+    };
+    
+    return counts;
+  }, [users]);
+
+  if (usersLoading || propertiesLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+        <div className="flex justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto py-8">
+      <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+      
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-primary" />
-              <span className="font-medium">Total Users</span>
+              <div className="p-2 bg-primary/10 rounded-full">
+                <User className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Total Users</p>
+                <h3 className="text-2xl font-bold">{userCounts.total}</h3>
+              </div>
             </div>
-            <p className="text-3xl font-bold mt-2">43</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <Home className="h-5 w-5 text-primary" />
-              <span className="font-medium">Properties</span>
+              <div className="p-2 bg-blue-100 rounded-full">
+                <Home className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Total Properties</p>
+                <h3 className="text-2xl font-bold">{properties?.length || 0}</h3>
+              </div>
             </div>
-            <p className="text-3xl font-bold mt-2">{properties.length}</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              <span className="font-medium">Bookings</span>
+              <div className="p-2 bg-green-100 rounded-full">
+                <Calendar className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Property Owners</p>
+                <h3 className="text-2xl font-bold">{userCounts.owner}</h3>
+              </div>
             </div>
-            <p className="text-3xl font-bold mt-2">{bookings.length}</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <MessageCircle className="h-5 w-5 text-primary" />
-              <span className="font-medium">Messages</span>
+              <div className="p-2 bg-purple-100 rounded-full">
+                <MessageCircle className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Finder Users</p>
+                <h3 className="text-2xl font-bold">{userCounts.finder}</h3>
+              </div>
             </div>
-            <p className="text-3xl font-bold mt-2">27</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <span className="font-medium">Revenue</span>
-            </div>
-            <p className="text-3xl font-bold mt-2">{priceFormatter.format(totalRevenue)}</p>
           </CardContent>
         </Card>
       </div>
-
-      <Tabs defaultValue="overview" onValueChange={setSelectedTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="properties">Properties</TabsTrigger>
-          <TabsTrigger value="bookings">Bookings</TabsTrigger>
-        </TabsList>
+      
+      {/* Charts and Tables */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* User Distribution Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>User Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={userRolesData}
+                  margin={{
+                    top: 20,
+                    right: 30,
+                    left: 20,
+                    bottom: 5,
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
         
-        <TabsContent value="overview" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Monthly Bookings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={monthlyData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#8B5CF6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Property Types</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={propertyTypeData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={90}
-                        fill="#8884d8"
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {propertyTypeData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start">
-                  <div className="bg-primary/10 rounded-full p-2 mr-3">
-                    <Calendar className="h-4 w-4 text-primary" />
+        {/* Recent Properties */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent Properties</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/admin/properties">View All</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentProperties.map((property) => (
+                <div key={property.id} className="flex items-center space-x-3 border-b pb-3 last:border-0">
+                  <div className="w-12 h-12 rounded overflow-hidden bg-gray-100">
+                    {property.images && property.images.length > 0 ? (
+                      <img 
+                        src={property.images[0].url} 
+                        alt={property.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Home className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className="font-medium">New booking</p>
-                    <p className="text-sm text-gray-500">John Finder booked Modern Studio in Central Area</p>
-                    <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
+                  <div className="flex-grow">
+                    <h4 className="font-medium">{property.title}</h4>
+                    <div className="flex items-center text-sm text-gray-500">
+                      <MapPin className="h-3 w-3 mr-1" /> 
+                      {property.location}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold">
+                      {new Intl.NumberFormat('en-IN', {
+                        style: 'currency',
+                        currency: 'INR',
+                        maximumFractionDigits: 0,
+                      }).format(property.price)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(property.created_at).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex items-start">
-                  <div className="bg-primary/10 rounded-full p-2 mr-3">
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">New user registered</p>
-                    <p className="text-sm text-gray-500">Sarah Smith created a new account</p>
-                    <p className="text-xs text-gray-400 mt-1">5 hours ago</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start">
-                  <div className="bg-primary/10 rounded-full p-2 mr-3">
-                    <Home className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">New property listed</p>
-                    <p className="text-sm text-gray-500">Mary Owner added Luxury PG with All Amenities</p>
-                    <p className="text-xs text-gray-400 mt-1">1 day ago</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="users" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Users List</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th className="text-left p-3 font-medium">Name</th>
-                      <th className="text-left p-3 font-medium">Email</th>
-                      <th className="text-left p-3 font-medium">Role</th>
-                      <th className="text-left p-3 font-medium">Joined</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usersList.map((user) => (
-                      <tr key={user.id} className="border-t">
-                        <td className="p-3">{user.name}</td>
-                        <td className="p-3">{user.email}</td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 
-                            user.role === 'owner' ? 'bg-blue-100 text-blue-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                          </span>
-                        </td>
-                        <td className="p-3">{new Date(user.joined).toLocaleDateString()}</td>
-                        <td className="p-3">
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="outline">View</Button>
-                            <Button size="sm" variant="outline">Edit</Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              ))}
               
-              <div className="flex justify-between items-center mt-4">
-                <span className="text-sm text-gray-500">Showing 1-5 of 43 users</span>
-                <div className="flex space-x-2">
-                  <Button size="sm" variant="outline" disabled>Previous</Button>
-                  <Button size="sm" variant="outline">Next</Button>
+              {recentProperties.length === 0 && (
+                <div className="text-center py-6 text-gray-500">
+                  No properties found
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="properties" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Properties List</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th className="text-left p-3 font-medium">Title</th>
-                      <th className="text-left p-3 font-medium">Location</th>
-                      <th className="text-left p-3 font-medium">Price</th>
-                      <th className="text-left p-3 font-medium">Rating</th>
-                      <th className="text-left p-3 font-medium">Owner</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {properties.map((property) => (
-                      <tr key={property.id} className="border-t">
-                        <td className="p-3">{property.title}</td>
-                        <td className="p-3">{property.location}</td>
-                        <td className="p-3">{priceFormatter.format(property.price)}/mo</td>
-                        <td className="p-3">{property.rating.toFixed(1)}</td>
-                        <td className="p-3">Mary Owner</td>
-                        <td className="p-3">
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="outline">View</Button>
-                            <Button size="sm" variant="outline">Edit</Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              <div className="flex justify-between items-center mt-4">
-                <span className="text-sm text-gray-500">Showing 1-6 of {properties.length} properties</span>
-                <div className="flex space-x-2">
-                  <Button size="sm" variant="outline" disabled>Previous</Button>
-                  <Button size="sm" variant="outline">Next</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="bookings" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bookings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th className="text-left p-3 font-medium">Property</th>
-                      <th className="text-left p-3 font-medium">User</th>
-                      <th className="text-left p-3 font-medium">Check In</th>
-                      <th className="text-left p-3 font-medium">Check Out</th>
-                      <th className="text-left p-3 font-medium">Amount</th>
-                      <th className="text-left p-3 font-medium">Status</th>
-                      <th className="text-left p-3 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bookings.map((booking) => (
-                      <tr key={booking.id} className="border-t">
-                        <td className="p-3">{booking.propertyTitle}</td>
-                        <td className="p-3">{booking.userName}</td>
-                        <td className="p-3">{new Date(booking.checkIn).toLocaleDateString()}</td>
-                        <td className="p-3">{new Date(booking.checkOut).toLocaleDateString()}</td>
-                        <td className="p-3">{priceFormatter.format(booking.totalPrice)}</td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            booking.status === 'confirmed' ? 'bg-green-100 text-green-800' : 
-                            booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            booking.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <Button size="sm" variant="outline">Details</Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-4">
+          <Button asChild>
+            <Link to="/admin/users">
+              <User className="mr-2 h-4 w-4" />
+              Manage Users
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/admin/properties">
+              <Home className="mr-2 h-4 w-4" />
+              View Properties
+            </Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link to="/admin/bookings">
+              <Calendar className="mr-2 h-4 w-4" />
+              View Bookings
+            </Link>
+          </Button>
+          <Button asChild variant="ghost">
+            <Link to="/admin/messages">
+              <MessageCircle className="mr-2 h-4 w-4" />
+              View Messages
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -13,14 +13,7 @@ export interface Property {
   featured: boolean | null;
   created_at: string;
   updated_at: string;
-  owner?: {
-    id: string;
-    name: string;
-    email: string;
-    role: UserRole;
-    avatar?: string;
-    phone?: string;
-  };
+  owner?: User;
   images?: PropertyImage[];
   amenities?: PropertyAmenity[];
   rating?: number;
@@ -97,9 +90,10 @@ export const propertiesApi = {
 
     if (error) throw new Error(error.message);
     
-    // Calculate ratings for each property
+    // Calculate ratings for each property and ensure owner.role is properly typed
     const propertiesWithRating = await Promise.all(
       (data || []).map(async (property) => {
+        // Get reviews for rating calculation
         const { data: reviews } = await supabase
           .from('reviews')
           .select('rating')
@@ -109,11 +103,22 @@ export const propertiesApi = {
           ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
           : 0;
         
-        return { ...property, rating };
+        // Ensure owner.role is properly typed if owner exists
+        const typedProperty = {
+          ...property,
+          rating,
+          // Convert owner.role from string to UserRole if owner exists
+          owner: property.owner ? {
+            ...property.owner,
+            role: property.owner.role as UserRole
+          } : undefined
+        };
+        
+        return typedProperty;
       })
     );
     
-    return propertiesWithRating;
+    return propertiesWithRating as Property[];
   },
 
   async getById(id: string) {
@@ -145,7 +150,19 @@ export const propertiesApi = {
       ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
       : 0;
 
-    return { ...data, reviews, rating };
+    // Ensure owner.role is properly typed if owner exists
+    const typedProperty = {
+      ...data,
+      reviews,
+      rating,
+      // Convert owner.role from string to UserRole if owner exists
+      owner: data.owner ? {
+        ...data.owner,
+        role: data.owner.role as UserRole
+      } : undefined
+    };
+
+    return typedProperty as Property;
   },
 
   async getByOwnerId(ownerId: string) {
@@ -172,11 +189,22 @@ export const propertiesApi = {
           ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
           : 0;
         
-        return { ...property, rating };
+        // Ensure owner.role is properly typed if owner exists
+        const typedProperty = {
+          ...property,
+          rating,
+          // Convert owner.role from string to UserRole if owner exists
+          owner: property.owner ? {
+            ...property.owner,
+            role: property.owner.role as UserRole
+          } : undefined
+        };
+        
+        return typedProperty;
       })
     );
     
-    return propertiesWithRating;
+    return propertiesWithRating as Property[];
   },
 
   async create(propertyData: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'owner' | 'images' | 'amenities' | 'rating'>) {

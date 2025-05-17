@@ -8,10 +8,18 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { messagesApi } from '@/services/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle,
+  DialogTrigger
+} from '@/components/ui/dialog';
+import { usersApi } from '@/services/api';
 
 const Messages = () => {
   const { currentUser } = useAuth();
@@ -21,8 +29,17 @@ const Messages = () => {
   const [newMessage, setNewMessage] = useState('');
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
+  const [newConversationDialogOpen, setNewConversationDialogOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch all users for new conversation dialog
+  const { data: users } = useQuery({
+    queryKey: ['users'],
+    queryFn: usersApi.getAllUsers,
+    enabled: !!currentUser
+  });
 
   // Fetch conversations for current user
   const { 
@@ -52,6 +69,11 @@ const Messages = () => {
     onSuccess: (data) => {
       setActiveConversationId(data.id);
       queryClient.invalidateQueries({ queryKey: ['conversations', currentUser?.id] });
+      setNewConversationDialogOpen(false);
+      toast({
+        title: "New conversation created",
+        description: "You can now start messaging"
+      });
     }
   });
 
@@ -81,7 +103,7 @@ const Messages = () => {
       
       if (existingConversation) {
         setActiveConversationId(existingConversation.id);
-      } else if (!createConversationMutation.isPending) {
+      } else if (!createConversationMutation.isPending && currentUser.id !== ownerId) {
         // Create a new conversation
         createConversationMutation.mutate([currentUser.id, ownerId]);
       }
@@ -113,6 +135,29 @@ const Messages = () => {
     });
   };
 
+  const handleCreateNewConversation = () => {
+    if (!currentUser || !selectedUserId || selectedUserId === currentUser.id) {
+      toast({
+        title: "Invalid selection",
+        description: "Please select a valid user to chat with",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if conversation already exists
+    const existingConversation = conversations?.find(conv => 
+      conv.participants.some(p => p.id === selectedUserId)
+    );
+    
+    if (existingConversation) {
+      setActiveConversationId(existingConversation.id);
+      setNewConversationDialogOpen(false);
+    } else {
+      createConversationMutation.mutate([currentUser.id, selectedUserId]);
+    }
+  };
+
   const getOtherParticipant = (conversationParticipants: any[]) => {
     if (!currentUser) return null;
     
@@ -139,6 +184,9 @@ const Messages = () => {
     );
   }
 
+  // Filter out current user from new conversation list
+  const otherUsers = users?.filter(user => user.id !== currentUser.id) || [];
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">Messages</h1>
@@ -146,8 +194,45 @@ const Messages = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(80vh-6rem)]">
         {/* Conversations List */}
         <div className="bg-white rounded-lg border overflow-hidden">
-          <div className="p-4">
+          <div className="p-4 flex justify-between items-center">
             <h2 className="font-semibold text-lg">Conversations</h2>
+            <Dialog open={newConversationDialogOpen} onOpenChange={setNewConversationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Chat
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Start a new conversation</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                  <Label htmlFor="user-select">Select a user to chat with</Label>
+                  <select
+                    id="user-select"
+                    className="w-full mt-2 p-2 border rounded-md"
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                  >
+                    <option value="">Select a user...</option>
+                    {otherUsers.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setNewConversationDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateNewConversation} disabled={!selectedUserId}>
+                    Start Conversation
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
           <Separator />
           <div className="overflow-y-auto h-[calc(80vh-12rem)]">
@@ -199,7 +284,7 @@ const Messages = () => {
               })
             ) : (
               <div className="p-4 text-center text-gray-500">
-                No conversations yet
+                No conversations yet. Start a new one!
               </div>
             )}
           </div>
@@ -314,7 +399,7 @@ const Messages = () => {
               <div className="text-center p-4">
                 <h3 className="font-semibold mb-2">No conversation selected</h3>
                 <p className="text-gray-500">
-                  Select a conversation from the list to start chatting
+                  Select a conversation from the list or start a new one
                 </p>
               </div>
             </div>
@@ -322,6 +407,15 @@ const Messages = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// Add the missing Label component
+const Label = ({ htmlFor, children, className = "" }: { htmlFor?: string; children: React.ReactNode; className?: string }) => {
+  return (
+    <label htmlFor={htmlFor} className={`text-sm font-medium text-gray-700 ${className}`}>
+      {children}
+    </label>
   );
 };
 

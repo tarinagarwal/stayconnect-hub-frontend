@@ -6,28 +6,66 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { getMockProperty } from '@/data/mockData';
 import { format, differenceInDays } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
+import { Property, propertiesApi, bookingsApi } from '@/services/api';
+import { useQuery, useMutation } from '@tanstack/react-query';
 
 const Booking = () => {
-  const { id } = useParams<{ id: string }>();
+  const { propertyId } = useParams<{ propertyId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAuth();
   
-  const [property, setProperty] = useState(id ? getMockProperty(id) : null);
   const [checkIn, setCheckIn] = useState<Date | null>(null);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [totalPrice, setTotalPrice] = useState(property?.price || 0);
+  const [totalPrice, setTotalPrice] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('card');
   
   // Form fields
   const [name, setName] = useState(currentUser?.name || '');
   const [email, setEmail] = useState(currentUser?.email || '');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(currentUser?.phone || '');
+
+  // Fetch property data from Supabase
+  const { data: property, isLoading } = useQuery({
+    queryKey: ['property', propertyId],
+    queryFn: () => propertyId ? propertiesApi.getById(propertyId) : null,
+    enabled: !!propertyId
+  });
+
+  // Create booking mutation
+  const createBookingMutation = useMutation({
+    mutationFn: (bookingData: any) => bookingsApi.create(bookingData),
+    onSuccess: () => {
+      toast({
+        title: "Booking Successful!",
+        description: "Your booking has been confirmed.",
+      });
+      
+      // Navigate to booking confirmation page
+      navigate('/dashboard/bookings', { 
+        state: { 
+          bookingSuccess: true,
+          propertyId: property?.id,
+          propertyTitle: property?.title,
+          checkIn,
+          checkOut,
+          totalPrice
+        } 
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Booking Failed",
+        description: error.message || "There was a problem creating your booking. Please try again.",
+        variant: "destructive"
+      });
+      setIsProcessing(false);
+    }
+  });
   
   useEffect(() => {
     if (location.state) {
@@ -43,6 +81,15 @@ const Booking = () => {
       setTotalPrice(property.price * months);
     }
   }, [property, checkIn, checkOut]);
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
+        <p className="mt-4">Loading property details...</p>
+      </div>
+    );
+  }
 
   if (!property) {
     return (
@@ -64,6 +111,16 @@ const Booking = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!currentUser) {
+      toast({
+        title: "Login Required",
+        description: "You need to login first to book this property.",
+        variant: "destructive"
+      });
+      navigate('/login');
+      return;
+    }
+    
     if (!name || !email || !phone) {
       toast({
         title: "Missing Information",
@@ -84,28 +141,21 @@ const Booking = () => {
     
     setIsProcessing(true);
     
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsProcessing(false);
-      
-      toast({
-        title: "Booking Successful!",
-        description: "Your booking has been confirmed.",
-      });
-      
-      // Navigate to booking confirmation page
-      navigate('/dashboard/bookings', { 
-        state: { 
-          bookingSuccess: true,
-          propertyId: property.id,
-          propertyTitle: property.title,
-          checkIn,
-          checkOut,
-          totalPrice
-        } 
-      });
-    }, 2000);
+    // Create booking in Supabase
+    createBookingMutation.mutate({
+      property_id: property.id,
+      user_id: currentUser.id,
+      check_in: format(checkIn, 'yyyy-MM-dd'),
+      check_out: format(checkOut, 'yyyy-MM-dd'),
+      total_price: totalPrice + property.price + 999, // Include security deposit and service fee
+      status: 'pending'
+    });
   };
+
+  // Get the first property image or use placeholder
+  const imageUrl = property.images && property.images.length > 0 
+    ? property.images[0].url 
+    : '/placeholder.svg';
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -237,9 +287,11 @@ const Booking = () => {
                 <Button 
                   type="submit" 
                   className="w-full" 
-                  disabled={isProcessing}
+                  disabled={isProcessing || createBookingMutation.isPending}
                 >
-                  {isProcessing ? 'Processing...' : `Pay ${priceFormatter.format(totalPrice)}`}
+                  {isProcessing || createBookingMutation.isPending ? 
+                    'Processing...' : 
+                    `Pay ${priceFormatter.format(totalPrice + property.price + 999)}`}
                 </Button>
               </div>
             </form>
@@ -253,7 +305,7 @@ const Booking = () => {
               <div className="mb-4">
                 <div className="aspect-video w-full overflow-hidden rounded-lg mb-3">
                   <img
-                    src={property.images[0]}
+                    src={imageUrl}
                     alt={property.title}
                     className="h-full w-full object-cover"
                   />

@@ -13,9 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { getMockProperty } from '@/data/mockData';
 import { CalendarIcon, Star, MapPin, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { Property, propertiesApi } from '@/services/api';
+import { useQuery } from '@tanstack/react-query';
 
 const PropertyDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,9 +28,25 @@ const PropertyDetails = () => {
   const [checkInDate, setCheckInDate] = useState<Date>();
   const [checkOutDate, setCheckOutDate] = useState<Date>();
 
-  const property = id ? getMockProperty(id) : null;
+  // Fetch property data from Supabase
+  const { data: property, isLoading, error } = useQuery({
+    queryKey: ['property', id],
+    queryFn: () => id ? propertiesApi.getById(id) : null,
+    enabled: !!id
+  });
 
-  if (!property) {
+  // Show loading state while fetching data
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
+        <p className="mt-4">Loading property details...</p>
+      </div>
+    );
+  }
+
+  // Show error state if property not found
+  if (error || !property) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <h2 className="text-2xl font-bold mb-4">Property not found</h2>
@@ -66,7 +83,7 @@ const PropertyDetails = () => {
       return;
     }
     
-    navigate(`/property/${id}/book`, { 
+    navigate(`/booking/${id}`, { 
       state: { 
         checkIn: checkInDate.toISOString(),
         checkOut: checkOutDate.toISOString()
@@ -86,8 +103,16 @@ const PropertyDetails = () => {
     }
     
     // Navigate to messages with this property owner
-    navigate(`/messages?owner=${property.ownerId}`);
+    navigate(`/messages?owner=${property.owner_id}`);
   };
+
+  // Get the main image URL safely
+  const mainImageUrl = property.images && property.images.length > 0 ? 
+    property.images[selectedImage]?.url : 
+    '/placeholder.svg';
+
+  // Ensure we have a valid reviews array
+  const reviews = property.reviews || [];
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -101,7 +126,7 @@ const PropertyDetails = () => {
           </div>
           <div className="flex items-center">
             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-            <span>{property.rating.toFixed(1)} ({property.reviews.length} reviews)</span>
+            <span>{property.rating ? property.rating.toFixed(1) : "No ratings"} ({reviews.length} reviews)</span>
           </div>
         </div>
       </div>
@@ -111,7 +136,7 @@ const PropertyDetails = () => {
         <div className="md:col-span-2">
           <div className="aspect-video w-full overflow-hidden rounded-lg">
             <img
-              src={property.images[selectedImage]}
+              src={mainImageUrl}
               alt={`${property.title} - View ${selectedImage + 1}`}
               className="h-full w-full object-cover"
             />
@@ -119,7 +144,7 @@ const PropertyDetails = () => {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
-          {property.images.map((image, index) => (
+          {property.images && property.images.map((image, index) => (
             <div key={index} 
                 className={cn(
                   "cursor-pointer overflow-hidden rounded-lg border-2",
@@ -127,7 +152,7 @@ const PropertyDetails = () => {
                 )}
                 onClick={() => setSelectedImage(index)}>
               <img
-                src={image}
+                src={image.url}
                 alt={`${property.title} - Thumbnail ${index + 1}`}
                 className="h-full w-full object-cover aspect-[3/2]"
               />
@@ -169,12 +194,12 @@ const PropertyDetails = () => {
             <TabsContent value="amenities">
               <h3 className="text-xl font-semibold mb-4">Available Amenities</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {property.amenities.map((amenity, index) => (
+                {property.amenities && property.amenities.map((amenity, index) => (
                   <div key={index} className="flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>{amenity}</span>
+                    <span>{amenity.amenity}</span>
                   </div>
                 ))}
               </div>
@@ -183,26 +208,26 @@ const PropertyDetails = () => {
             <TabsContent value="reviews">
               <h3 className="text-xl font-semibold mb-4">Reviews</h3>
               
-              {property.reviews.length > 0 ? (
+              {reviews.length > 0 ? (
                 <div className="space-y-6">
-                  {property.reviews.map((review) => (
+                  {reviews.map((review) => (
                     <div key={review.id} className="border-b border-gray-200 pb-4">
                       <div className="flex items-center mb-2">
                         <div className="w-10 h-10 rounded-full overflow-hidden mr-3">
-                          {review.userAvatar ? (
-                            <img src={review.userAvatar} alt={review.userName} className="w-full h-full object-cover" />
+                          {review.user?.avatar ? (
+                            <img src={review.user.avatar} alt={review.user.name} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
                               <span className="text-gray-500 font-medium">
-                                {review.userName[0]}
+                                {review.user?.name?.[0] || '?'}
                               </span>
                             </div>
                           )}
                         </div>
                         <div>
-                          <p className="font-medium">{review.userName}</p>
+                          <p className="font-medium">{review.user?.name || 'Anonymous User'}</p>
                           <p className="text-sm text-gray-500">
-                            {new Date(review.createdAt).toLocaleDateString()}
+                            {new Date(review.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       </div>

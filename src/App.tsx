@@ -62,7 +62,7 @@ const App = () => {
                 <Route path="owner" element={<DashboardLayout requiredRole="owner" />}>
                   <Route index element={<OwnerDashboard />} />
                   <Route path="properties" element={<h1>My Properties</h1>} />
-                  <Route path="properties/:propertyId/edit" element={<EditProperty />} />
+                  <Route path="properties/:id/edit" element={<EditProperty />} />
                   <Route path="bookings" element={<h1>Property Bookings</h1>} />
                   <Route path="list-property" element={<ListProperty />} />
                   <Route path="messages" element={<Messages />} />
