@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
-import { Send, Loader2, Plus } from 'lucide-react';
+import { Send, Loader2, Plus, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { messagesApi } from '@/services/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,9 +17,11 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { usersApi } from '@/services/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Messages = () => {
   const { currentUser } = useAuth();
@@ -73,6 +75,14 @@ const Messages = () => {
       toast({
         title: "New conversation created",
         description: "You can now start messaging"
+      });
+    },
+    onError: (error) => {
+      console.error("Error creating conversation:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create conversation. Please try again.",
+        variant: "destructive"
       });
     }
   });
@@ -206,22 +216,24 @@ const Messages = () => {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Start a new conversation</DialogTitle>
+                  <DialogDescription>
+                    Select a user to start chatting with them
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
                   <Label htmlFor="user-select">Select a user to chat with</Label>
-                  <select
-                    id="user-select"
-                    className="w-full mt-2 p-2 border rounded-md"
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                  >
-                    <option value="">Select a user...</option>
-                    {otherUsers.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} ({user.role})
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                    <SelectTrigger className="w-full mt-2">
+                      <SelectValue placeholder="Select a user..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {otherUsers.map(user => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name} ({user.role})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setNewConversationDialogOpen(false)}>
@@ -255,7 +267,7 @@ const Messages = () => {
                   >
                     <Avatar>
                       {otherParticipant?.avatar && (
-                        <AvatarImage src={otherParticipant.avatar} />
+                        <AvatarImage src={otherParticipant.avatar} alt={otherParticipant?.name} />
                       )}
                       <AvatarFallback>
                         {otherParticipant ? getInitials(otherParticipant.name) : '?'}
@@ -311,7 +323,7 @@ const Messages = () => {
                         <>
                           <Avatar>
                             {otherParticipant?.avatar && (
-                              <AvatarImage src={otherParticipant.avatar} />
+                              <AvatarImage src={otherParticipant.avatar} alt={otherParticipant.name} />
                             )}
                             <AvatarFallback>
                               {otherParticipant ? getInitials(otherParticipant.name) : '?'}
@@ -321,6 +333,9 @@ const Messages = () => {
                             <h2 className="font-semibold">
                               {otherParticipant?.name || 'Unknown User'}
                             </h2>
+                            <p className="text-xs text-gray-500">
+                              {otherParticipant?.role || ''}
+                            </p>
                           </div>
                         </>
                       );

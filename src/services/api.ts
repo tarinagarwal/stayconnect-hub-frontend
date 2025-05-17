@@ -170,6 +170,7 @@ export const propertiesApi = {
       .from('properties')
       .select(`
         *,
+        owner:profiles(*),
         images:property_images(*),
         amenities:property_amenities(*)
       `)
@@ -193,7 +194,6 @@ export const propertiesApi = {
         const typedProperty = {
           ...property,
           rating,
-          // Convert owner.role from string to UserRole if owner exists
           owner: property.owner ? {
             ...property.owner,
             role: property.owner.role as UserRole

@@ -29,6 +29,17 @@ import OwnerDashboard from './pages/dashboard/OwnerDashboard';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
 import ListProperty from './pages/owner/ListProperty';
 import EditProperty from './pages/owner/EditProperty';
+import PropertyBookings from './pages/owner/PropertyBookings';
+
+// Admin pages
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminProperties from './pages/admin/AdminProperties';
+import AdminBookings from './pages/admin/AdminBookings';
+import AdminMessages from './pages/admin/AdminMessages';
+
+// Finder Dashboard pages
+import MyBookings from './pages/dashboard/FinderDashboard/MyBookings';
+import SavedProperties from './pages/dashboard/FinderDashboard/SavedProperties';
 
 const App = () => {
   const queryClient = new QueryClient();
@@ -52,8 +63,8 @@ const App = () => {
                 {/* Finder (normal user) routes */}
                 <Route path="dashboard" element={<DashboardLayout />}>
                   <Route index element={<FinderDashboard />} />
-                  <Route path="saved" element={<h1>Saved Properties</h1>} />
-                  <Route path="bookings" element={<h1>My Bookings</h1>} />
+                  <Route path="saved" element={<SavedProperties />} />
+                  <Route path="bookings" element={<MyBookings />} />
                   <Route path="messages" element={<Messages />} />
                   <Route path="settings" element={<h1>Settings</h1>} />
                 </Route>
@@ -63,7 +74,7 @@ const App = () => {
                   <Route index element={<OwnerDashboard />} />
                   <Route path="properties" element={<h1>My Properties</h1>} />
                   <Route path="properties/:id/edit" element={<EditProperty />} />
-                  <Route path="bookings" element={<h1>Property Bookings</h1>} />
+                  <Route path="bookings" element={<PropertyBookings />} />
                   <Route path="list-property" element={<ListProperty />} />
                   <Route path="messages" element={<Messages />} />
                   <Route path="settings" element={<h1>Settings</h1>} />
@@ -72,10 +83,10 @@ const App = () => {
                 {/* Admin routes */}
                 <Route path="admin" element={<DashboardLayout requiredRole="admin" />}>
                   <Route index element={<AdminDashboard />} />
-                  <Route path="users" element={<h1>Manage Users</h1>} />
-                  <Route path="properties" element={<h1>All Properties</h1>} />
-                  <Route path="bookings" element={<h1>All Bookings</h1>} />
-                  <Route path="messages" element={<h1>Message Center</h1>} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="properties" element={<AdminProperties />} />
+                  <Route path="bookings" element={<AdminBookings />} />
+                  <Route path="messages" element={<AdminMessages />} />
                   <Route path="settings" element={<h1>System Settings</h1>} />
                 </Route>
 
